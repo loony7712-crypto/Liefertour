@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Liefertour"><meta name="theme-color" content="#0f6e74">
+<title>Liefertour</title>
+<link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icon.svg"><link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+:root{--bg:#f3f5f7;--card:#fff;--ink:#1d2733;--mut:#5b6575;--line:#d6dce3;--acc:#0f6e74;--accbg:#e2f1f1;--ok:#2e7d32;--okbg:#e6f4e7;--rot:#c62828;--rotbg:#fdecea;--gelb:#9a5800;--gelbbg:#fff1dc}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.35 -apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:12px;padding:10px 14px;min-height:46px}
+button.haupt{background:var(--acc);color:#fff;border-color:var(--acc);font-weight:600}
+button.rot{background:var(--rotbg);color:var(--rot);border-color:#f1b5b0}
+input,textarea{font:inherit;font-size:17px;border:1px solid var(--line);border-radius:10px;padding:11px 12px;width:100%;background:#fff;color:var(--ink)}
+header{position:sticky;top:0;z-index:500;background:var(--card);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;padding:8px 10px;padding-top:max(8px,env(safe-area-inset-top))}
+header h1{font-size:19px;margin:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+header button{min-height:42px;padding:6px 12px}
+main{padding:12px;padding-bottom:110px;max-width:760px;margin:0 auto}
+.karte-t{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:10px}
+.tour{display:flex;gap:10px;align-items:center}.tour .t{flex:1;min-width:0}.tour b{display:block;font-size:18px}
+.klein{font-size:14px;color:var(--mut)}
+.hinweis{background:var(--gelbbg);color:var(--gelb);border-radius:12px;padding:10px 12px;margin-bottom:10px}
+#karte{height:38vh;min-height:220px;border-radius:14px;border:1px solid var(--line);margin-bottom:8px;background:#e8ecef}
+.info{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:4px 2px 8px;font-size:15px;color:var(--mut)}
+.reihe{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}.reihe button{flex:1}
+.liste{display:flex;flex-direction:column;gap:6px}
+.stopp{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:8px}
+.stopp.fertig{opacity:.55}.stopp.naechster{border:2px solid var(--acc)}.stopp.zieht{box-shadow:0 6px 18px rgba(0,0,0,.2);opacity:.95}
+.griff{touch-action:none;cursor:grab;font-size:22px;color:var(--mut);padding:8px 4px;user-select:none}
+.nr{width:34px;height:34px;border-radius:50%;background:var(--acc);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none}
+.stopp.fertig .nr{background:var(--ok)}.stopp.fehlt .nr{background:var(--rot)}
+.st{flex:1;min-width:0}.st b{display:block}.st .a{font-size:15px;overflow-wrap:anywhere}
+.haken{width:52px;height:52px;border-radius:50%;font-size:24px;padding:0;flex:none}
+.stopp.fertig .haken{background:var(--okbg);color:var(--ok);border-color:#a8d5ab}
+.unten{position:fixed;left:0;right:0;bottom:0;z-index:600;background:var(--card);border-top:1px solid var(--line);padding:10px 12px;padding-bottom:max(10px,env(safe-area-inset-bottom))}
+.unten button{width:100%;font-size:19px;min-height:58px;border-radius:14px}
+.unten .ziel{font-size:14px;color:var(--mut);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pin{background:var(--acc);color:#fff;border:2px solid #fff;border-radius:50%;display:flex!important;align-items:center;justify-content:center;font:700 13px Arial;box-shadow:0 1px 4px rgba(0,0,0,.4)}
+.pin.fertig{background:#8a9aa5}.pin.naechster{background:#e65100}.pin.start{background:#1d2733}
+.dlg-bg{position:fixed;inset:0;background:rgba(20,30,40,.45);z-index:1000;display:flex;align-items:flex-end;justify-content:center}
+.dlg{background:var(--card);width:100%;max-width:640px;border-radius:18px 18px 0 0;padding:14px;padding-bottom:max(14px,env(safe-area-inset-bottom));max-height:92vh;overflow:auto}
+.dlg-kopf{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;font-size:19px}
+.dlg-fuss{display:flex;gap:8px;margin-top:12px}.dlg-fuss button{flex:1}
+.vorschl{display:flex;flex-direction:column;gap:6px;margin-top:8px}.vorschl button{text-align:left}
+.feld{display:flex;flex-direction:column;gap:4px;font-size:14px;color:var(--mut);margin-bottom:10px}
+.wahl{display:grid;grid-template-columns:1fr 1fr;gap:8px}.wahl button.an{background:var(--accbg);border:2px solid var(--acc);font-weight:600}
+#toast{position:fixed;left:50%;bottom:120px;transform:translateX(-50%);background:#22303d;color:#fff;padding:12px 18px;border-radius:12px;display:none;z-index:2000;max-width:90vw;text-align:center}
+</style></head><body>
+<div id="app"></div><div id="toast"></div>
+<script>
+"use strict";
+/* Liefertour (Spec 001 Stufe 1, 30.10.2026): Touren mit Stopps, Reihenfolge legt der Fahrer fest (Ziehen oder ▲▼),
+   Karte (OpenStreetMap/Leaflet), Strecke (OSRM), Navigation zum nächsten Stopp mit Google Maps oder Apple Karten (wählbar).
+   Adresssuche über Photon (OpenStreetMap). Alles im Speicher des Handys (localStorage), kein Server, keine Konten. */
+(function(){
+const LS="liefertour-v1",PHOTON="https://photon.komoot.io/api/",OSRM="https://router.project-osrm.org/route/v1/driving/";
+const $=s=>document.querySelector(s);
+function h(tag,attrs,...kids){const e=document.createElement(tag);
+  for(const[k,v]of Object.entries(attrs||{})){if(v==null||v===false)continue;
+    if(k.startsWith("on"))e.addEventListener(k.slice(2),v);else if(k==="class")e.className=v;else if(k==="style")e.style.cssText=v;else if(k==="value")e.value=v;else e.setAttribute(k,v===true?"":v)}
+  for(const c of kids.flat(Infinity)){if(c==null||c===false)continue;e.append(c.nodeType?c:document.createTextNode(String(c)))}return e}
+const neuId=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const datum=()=>new Date().toLocaleDateString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit"});
+const kmT=k=>k<10?k.toFixed(1).replace(".",","):Math.round(k).toString();
+const zeitT=m=>m<60?`${Math.round(m)} Min`:`${Math.floor(m/60)} Std ${Math.round(m%60)} Min`;
+let toastT;function toast(t){const e=$("#toast");e.textContent=t;e.style.display="block";clearTimeout(toastT);toastT=setTimeout(()=>e.style.display="none",3500)}
+
+let D=null;try{D=JSON.parse(localStorage.getItem(LS))}catch(e){}
+D=D||{einst:{start:null,nav:/iPhone|iPad|Macintosh/.test(navigator.userAgent)?"apple":"google"},touren:[],cache:{}};
+function speichern(){try{localStorage.setItem(LS,JSON.stringify(D))}catch(e){toast("Speichern hat nicht geklappt. Ist der Speicher voll?")}}
+const tour=id=>D.touren.find(t=>t.id===id);
+
+/* ---------- Adresssuche (Photon, OpenStreetMap) ---------- */
+function bias(){const s=D.einst.start;return s?`&lat=${s.lat}&lon=${s.lon}`:""}
+function label(p){const str=[p.street,p.housenumber].filter(Boolean).join(" "),ort=[p.postcode,p.city||p.town||p.village||p.locality||p.district].filter(Boolean).join(" ");
+  const teile=[p.name&&p.name!==p.street?p.name:"",str,ort].filter(Boolean);return[...new Set(teile)].join(", ")}
+async function suche(q,limit=5){const r=await fetch(`${PHOTON}?q=${encodeURIComponent(q)}&limit=${limit}&lang=de${bias()}`);if(!r.ok)throw new Error("Suche "+r.status);
+  const j=await r.json();return j.features.map(f=>({lat:f.geometry.coordinates[1],lon:f.geometry.coordinates[0],text:label(f.properties),hn:!!f.properties.housenumber}))}
+// Eine Zeile aus einer eingefügten Liste: „Name, Straße 1, PLZ Ort“ oder nur die Adresse
+// mitName=false: die Zeile ist sicher nur eine Adresse (z. B. aus Excel-Spalten)
+async function finde(zeile,mitName=true){const k=(mitName?"":"a:")+zeile.trim().toLowerCase();if(D.cache[k])return D.cache[k];
+  const teile=zeile.split(",").map(s=>s.trim()).filter(Boolean);let name="",q=zeile;
+  if(mitName&&teile.length>=3&&!/\d/.test(teile[0])){name=teile[0];q=teile.slice(1).join(", ")}
+  let r=(await suche(q,1))[0];
+  if(!r&&mitName&&!name&&teile.length>=2&&!/\d/.test(teile[0])){name=teile[0];r=(await suche(teile.slice(1).join(", "),1))[0]}
+  if(!r)return null;
+  // Kennt die Kartensuche die Hausnummer nicht (nur die Straße gefunden), bleibt der eingegebene Text stehen
+  const eigen=name?zeile.slice(zeile.indexOf(",")+1).trim():zeile.trim();
+  const e={lat:r.lat,lon:r.lon,text:!r.hn&&/\d/.test(eigen)?eigen:r.text,name};D.cache[k]=e;speichern();return e}
+
+/* ---------- Dialoge (von unten, gut mit dem Daumen) ---------- */
+function dialog(titel,inhalt,knoepfe){return new Promise(ok=>{
+  const zu=w=>{bg.remove();ok(w)};
+  const bg=h("div",{class:"dlg-bg",onclick:e=>{if(e.target===bg)zu(null)}},h("div",{class:"dlg"},h("div",{class:"dlg-kopf"},h("b",{},titel),h("button",{onclick:()=>zu(null),"aria-label":"Schließen"},"✕")),inhalt,
+    knoepfe&&knoepfe.length?h("div",{class:"dlg-fuss"},...knoepfe.map(k=>h("button",{class:k.klasse||"",onclick:()=>{if(k.pruefe&&!k.pruefe())return;zu(k.wert)}},k.text))):null));
+  document.body.append(bg);const f=bg.querySelector("input,textarea");if(f&&!("ontouchstart" in window))setTimeout(()=>f.focus(),50)})}
+function eingabe(titel,wert="",ph=""){const f=h("input",{value:wert,placeholder:ph});
+  f.addEventListener("keydown",e=>{if(e.key==="Enter")f.closest(".dlg").querySelector(".dlg-fuss .haupt").click()});
+  return dialog(titel,f,[{text:"Abbrechen",wert:null},{text:"OK",klasse:"haupt",wert:"ok"}]).then(w=>w==="ok"?f.value.trim():null)}
+const frage=(titel,text,ja="Ja",klasse="haupt")=>dialog(titel,h("p",{},text),[{text:"Nein",wert:false},{text:ja,klasse,wert:true}]).then(w=>!!w);
+// Adresse suchen mit Vorschlägen beim Tippen; mehrfach=true: Dialog bleibt für weitere Adressen offen
+function adresseSuchen(titel,{mehrfach=false,beiWahl}){
+  const f=h("input",{placeholder:"Straße Nr, Ort",autocomplete:"off",enterkeyhint:"search"}),liste=h("div",{class:"vorschl"}),stand=h("div",{class:"klein",style:"margin-top:6px"});
+  let timer=null,nr=0;
+  const los=async()=>{const q=f.value.trim();if(q.length<3){liste.replaceChildren();stand.textContent="";return}const meins=++nr;stand.textContent="Suche …";
+    try{const r=await suche(q,6);if(meins!==nr)return;stand.textContent=r.length?"":"Nichts gefunden. Mit Ort oder Postleitzahl versuchen.";
+      liste.replaceChildren(...r.map(x=>h("button",{onclick:()=>{beiWahl(x);if(mehrfach){f.value="";liste.replaceChildren();stand.textContent=`Hinzugefügt: ${x.text}`;f.focus()}else zu.click()}},x.text)))}
+    catch(e){if(meins===nr)stand.textContent="Keine Verbindung zur Adresssuche. Ist das Handy online?"}};
+  f.addEventListener("input",()=>{clearTimeout(timer);timer=setTimeout(los,400)});
+  f.addEventListener("keydown",e=>{if(e.key==="Enter"){clearTimeout(timer);los()}});
+  const zu=h("button",{class:"haupt",style:"width:100%;margin-top:12px",onclick:()=>{const bg=zu.closest(".dlg-bg");if(bg)bg.remove();fertig()}},mehrfach?"Fertig":"Abbrechen");
+  let fertig=()=>{};
+  return new Promise(ok=>{fertig=ok;dialog(titel,h("div",{},f,stand,liste,zu),[]).then(()=>ok())})}
+
+/* ---------- Seiten ---------- */
+let seite={art:"touren"};
+function geh(s){seite=s;if(karte){karte.remove();karte=null}window.scrollTo(0,0);zeige()}
+function zeige(){const a=$("#app");if(seite.art==="tour"&&tour(seite.id))a.replaceChildren(...tourSeite(tour(seite.id)));else if(seite.art==="einst")a.replaceChildren(...einstSeite());else{seite={art:"touren"};a.replaceChildren(...tourenSeite())}
+  if(seite.art==="tour"){const t=tour(seite.id);setTimeout(()=>{aktualisiere(t,true);karteZeichnen(true);gezeigt=punkte(t).length;streckeHolen()},30)}}
+
+function tourenSeite(){
+  const neu=async()=>{const n=await eingabe("Neue Tour",`Tour ${datum()}`);if(n==null)return;const t={id:neuId(),name:n||`Tour ${datum()}`,erstellt:Date.now(),zurueck:true,stopps:[]};D.touren.unshift(t);speichern();geh({art:"tour",id:t.id})};
+  return[h("header",{},h("h1",{},"Liefertour"),h("button",{onclick:()=>geh({art:"einst"})},"Einstellungen")),
+    h("main",{},
+      !D.einst.start?h("div",{class:"hinweis",onclick:()=>geh({art:"einst"})},"Bitte zuerst unter Einstellungen den Startpunkt eintragen (z. B. das Lager)."):null,
+      h("button",{class:"haupt",style:"width:100%;font-size:19px;min-height:56px;margin-bottom:8px",onclick:neu},"+ Neue Tour"),
+      h("button",{style:"width:100%;margin-bottom:12px",onclick:dateiOeffnen},"Tour aus Datei öffnen"),
+      D.touren.length?D.touren.map(t=>{const fertig=t.stopps.filter(s=>s.erledigt).length;
+        return h("div",{class:"karte-t tour"},h("div",{class:"t",onclick:()=>geh({art:"tour",id:t.id})},h("b",{},t.name),h("span",{class:"klein"},`${t.stopps.length} Stopps${fertig?` · ${fertig} erledigt`:""}`)),
+          h("button",{onclick:()=>tourMenue(t),"aria-label":"Mehr"},"⋯"))}):h("p",{class:"klein",style:"text-align:center;margin-top:30px"},"Noch keine Touren. Tippe auf „+ Neue Tour“."))]}
+async function tourMenue(t){
+  const w=await dialog(t.name,h("div",{style:"display:flex;flex-direction:column;gap:8px"},
+    ...[["umbenennen","Umbenennen"],["kopie","Kopieren (alle Stopps wieder offen)"],["offen","Alle Haken entfernen"],["weg","Tour löschen"]].map(([k,txt])=>h("button",{class:k==="weg"?"rot":"",onclick:e=>{e.target.closest(".dlg-bg").remove();aktion(k)}},txt))),[]);
+  async function aktion(k){
+    if(k==="umbenennen"){const n=await eingabe("Name der Tour",t.name);if(n){t.name=n;speichern();zeige()}}
+    if(k==="kopie"){const n={...JSON.parse(JSON.stringify(t)),id:neuId(),name:t.name+" (Kopie)",erstellt:Date.now()};n.stopps.forEach(s=>{s.erledigt=false;s.id=neuId()});D.touren.unshift(n);speichern();zeige()}
+    if(k==="offen"){t.stopps.forEach(s=>s.erledigt=false);speichern();zeige()}
+    if(k==="weg"&&await frage("Tour löschen",`„${t.name}“ mit ${t.stopps.length} Stopps löschen?`,"Löschen","rot")){D.touren=D.touren.filter(x=>x!==t);speichern();zeige()}}}
+
+function einstSeite(){
+  const s=D.einst.start;
+  const navKnopf=(k,t)=>h("button",{class:D.einst.nav===k?"an":"",onclick:()=>{D.einst.nav=k;speichern();zeige()}},t);
+  return[h("header",{},h("button",{onclick:()=>geh({art:"touren"})},"← Touren"),h("h1",{},"Einstellungen")),
+    h("main",{},
+      h("div",{class:"karte-t"},h("b",{},"Startpunkt"),h("p",{class:"klein",style:"margin:4px 0 8px"},s?s.text:"Noch nicht eingetragen. Von hier starten alle Touren."),
+        h("button",{class:"haupt",style:"width:100%",onclick:()=>adresseSuchen("Startpunkt",{beiWahl:x=>{D.einst.start={lat:x.lat,lon:x.lon,text:x.text};speichern();zeige()}})},s?"Startpunkt ändern":"Startpunkt eintragen")),
+      h("div",{class:"karte-t"},h("b",{},"Navigation mit"),h("p",{class:"klein",style:"margin:4px 0 8px"},"Diese App öffnet beim Knopf „Navigieren“ das gewählte Kartenprogramm."),
+        h("div",{class:"wahl"},navKnopf("google","Google Maps"),navKnopf("apple","Apple Karten"))),
+      h("div",{class:"karte-t"},h("b",{},"Gemerkte Adressen"),h("p",{class:"klein",style:"margin:4px 0 8px"},`${Object.keys(D.cache).length} Adressen sind gespeichert und werden beim nächsten Einlesen sofort gefunden.`),
+        h("button",{onclick:async()=>{if(await frage("Adressen vergessen","Alle gemerkten Adressen vergessen? Touren bleiben erhalten.","Vergessen","rot")){D.cache={};speichern();zeige()}}},"Gemerkte Adressen vergessen")),
+      h("div",{class:"karte-t"},h("b",{},"Andere Fahrer"),h("p",{class:"klein",style:"margin:4px 0 8px"},"Schickt den Link zu dieser App per WhatsApp. Der Fahrer öffnet ihn und legt die App auf seinen Startbildschirm."),
+        h("button",{style:"width:100%;background:#e7f8ee;border-color:#9fd8b4;color:#11672f;font-weight:600;margin-bottom:8px",onclick:appWeitergeben},"App per WhatsApp weitergeben"),
+        h("button",{style:"width:100%",onclick:()=>window.open("anleitung.html","_blank")},"Anleitung für Fahrer")),
+      h("p",{class:"klein"},"Alles bleibt auf diesem Handy. Karte und Adresssuche: © OpenStreetMap-Mitwirkende, Photon, OSRM."))]}
+
+/* ---------- Teilen: Tour als Link (WhatsApp) oder Datei ---------- */
+// Der Link enthält die ganze Tour, gepackt (deflate) und als Text kodiert. Wer die App noch nicht hat, bekommt sie mit demselben Link.
+const b64=u=>{let s="";for(let i=0;i<u.length;i+=8192)s+=String.fromCharCode(...u.subarray(i,i+8192));return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"")};
+const unb64=s=>Uint8Array.from(atob(s.replace(/-/g,"+").replace(/_/g,"/")),c=>c.charCodeAt(0));
+async function packe(obj){const json=JSON.stringify(obj);
+  if(window.CompressionStream){const st=new Blob([json]).stream().pipeThrough(new CompressionStream("deflate-raw"));return "z"+b64(new Uint8Array(await new Response(st).arrayBuffer()))}
+  return "j"+b64(new TextEncoder().encode(json))}
+async function entpacke(s){const buf=unb64(s.slice(1));
+  if(s[0]==="z"){const st=new Blob([buf]).stream().pipeThrough(new DecompressionStream("deflate-raw"));return JSON.parse(await new Response(st).text())}
+  return JSON.parse(new TextDecoder().decode(buf))}
+const tourDaten=t=>({v:1,n:t.name,z:t.zurueck!==false,st:D.einst.start,s:t.stopps.map(s=>[s.text,s.lat==null?null:+s.lat.toFixed(6),s.lon==null?null:+s.lon.toFixed(6),s.name||"",s.tel||"",s.notiz||""])});
+const appUrl=()=>location.href.split("#")[0].split("?")[0];
+const online=()=>/^https?:$/.test(location.protocol);
+async function perWhatsApp(t){if(!t.stopps.length){toast("Die Tour hat noch keine Stopps.");return}
+  if(!online())toast("Hinweis: Der Link funktioniert erst, wenn die App im Internet steht (z. B. GitHub Pages).");
+  const link=`${appUrl()}#tour=${await packe(tourDaten(t))}`;
+  window.open("https://wa.me/?text="+encodeURIComponent(`Liefertour „${t.name}“ (${t.stopps.length} Stopps). Zum Öffnen antippen:\n${link}`),"_blank")}
+function appWeitergeben(){if(!online())toast("Hinweis: Der Link funktioniert erst, wenn die App im Internet steht (z. B. GitHub Pages).");
+  window.open("https://wa.me/?text="+encodeURIComponent(`Liefertour-App für unsere Touren:\n${appUrl()}\n\nÖffnen und auf den Startbildschirm legen: iPhone: Teilen → „Zum Home-Bildschirm“. Android: ⋮ → „App installieren“ oder „Zum Startbildschirm hinzufügen“.`),"_blank")}
+async function alsDatei(t){if(!t.stopps.length){toast("Die Tour hat noch keine Stopps.");return}
+  const name=`${t.name.replace(/[\\/:*?"<>|]/g,"-")}.liefertour.json`,f=new File([JSON.stringify(tourDaten(t))],name,{type:"application/json"});
+  if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f],title:t.name});return}catch(e){if(e.name==="AbortError")return}}
+  const a=h("a",{href:URL.createObjectURL(f),download:name});document.body.append(a);a.click();a.remove();toast("Datei gespeichert. Sie lässt sich z. B. per WhatsApp verschicken.")}
+function tourUebernehmen(d){if(!d||!Array.isArray(d.s))throw new Error("kein Tourformat");
+  const t={id:neuId(),name:d.n||`Tour ${datum()}`,erstellt:Date.now(),zurueck:d.z!==false,
+    stopps:d.s.map(x=>({id:neuId(),text:String(x[0]||""),lat:x[1]==null?null:+x[1],lon:x[2]==null?null:+x[2],name:x[3]||"",tel:x[4]||"",notiz:x[5]||"",erledigt:false}))};
+  if(!D.einst.start&&d.st&&d.st.lat!=null)D.einst.start=d.st; // eigener Startpunkt bleibt, sonst den des Absenders übernehmen
+  D.touren.unshift(t);speichern();return t}
+async function anbieten(d){if(await frage("Tour übernehmen",`Tour „${d.n}“ mit ${d.s.length} Stopps übernehmen?`,"Übernehmen")){const t=tourUebernehmen(d);geh({art:"tour",id:t.id})}}
+async function linkPruefen(){const m=location.hash.match(/^#tour=(.+)$/);if(!m)return;history.replaceState(null,"",appUrl());
+  try{await anbieten(await entpacke(m[1]))}catch(e){console.warn(e);toast("Der Tour-Link ist beschädigt oder unvollständig. Bitte die Tour als Datei schicken lassen.")}}
+function dateiOeffnen(){const inp=h("input",{type:"file",accept:".json,application/json"});
+  inp.addEventListener("change",async()=>{const f=inp.files[0];if(!f)return;try{await anbieten(JSON.parse(await f.text()))}catch(e){toast("Das ist keine Tour-Datei der Liefertour-App.")}});inp.click()}
+window.addEventListener("hashchange",linkPruefen);
+
+/* ---------- Tour ---------- */
+let karte=null,schicht=null,linie=null,strecke=null,streckeKey="",streckeT=null;
+const naechster=t=>t.stopps.find(s=>!s.erledigt);
+function navUrl(p){return D.einst.nav==="apple"?`https://maps.apple.com/?daddr=${p.lat},${p.lon}&dirflg=d`:`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}&travelmode=driving`}
+function navigiere(p){if(p.lat==null){toast("Diese Adresse wurde nicht gefunden. Bitte antippen und korrigieren.");return}window.open(navUrl(p),"_blank")}
+function tourSeite(t){
+  const titel=h("h1",{onclick:async()=>{const n=await eingabe("Name der Tour",t.name);if(n){t.name=n;speichern();titel.textContent=n}}},t.name);
+  return[h("header",{},h("button",{onclick:()=>geh({art:"touren"})},"← Touren"),titel),
+    h("main",{},
+      !D.einst.start?h("div",{class:"hinweis",onclick:()=>geh({art:"einst"})},"Kein Startpunkt eingetragen. Hier tippen."):null,
+      h("div",{id:"karte"},typeof L==="undefined"?h("p",{class:"klein",style:"padding:20px;text-align:center"},"Die Karte braucht Internet."):null),
+      h("div",{class:"info",id:"info"}),
+      h("div",{class:"reihe"},h("button",{class:"haupt",onclick:()=>adresseSuchen("Adresse hinzufügen",{mehrfach:true,beiWahl:x=>{t.stopps.push({id:neuId(),text:x.text,lat:x.lat,lon:x.lon,name:"",tel:"",notiz:"",erledigt:false});speichern();aktualisiere(t)}})},"+ Adresse"),
+        h("button",{onclick:()=>listeEinfuegen(t)},"Liste einfügen"),h("button",{onclick:()=>excelEinlesen(t)},"Excel")),
+      h("div",{class:"liste",id:"liste"}),
+      h("label",{class:"karte-t",style:"display:flex;gap:10px;align-items:center;margin-top:10px"},(()=>{const c=h("input",{type:"checkbox",style:"width:24px;height:24px"});c.checked=t.zurueck!==false;c.addEventListener("change",()=>{t.zurueck=c.checked;speichern();aktualisiere(t)});return c})(),
+        h("span",{},"Am Ende zurück zum Start")),
+      h("div",{class:"reihe",style:"margin-top:10px"},h("button",{style:"background:#e7f8ee;border-color:#9fd8b4;color:#11672f;font-weight:600",onclick:()=>perWhatsApp(t)},"Per WhatsApp senden"),
+        h("button",{onclick:()=>alsDatei(t)},"Als Datei teilen"))),
+    h("div",{class:"unten",id:"unten"})]}
+// Kommen Stopps dazu oder fallen weg, zeigt die Karte wieder alle; beim Abhaken oder Verschieben bleibt der Ausschnitt
+let gezeigt=-1;
+function aktualisiere(t,ohneKarte){listeZeichnen(t);untenZeichnen(t);infoZeichnen(t);
+  if(!ohneKarte){const n=punkte(t).length;karteZeichnen(n!==gezeigt);gezeigt=n;streckeHolen()}}
+function infoZeichnen(t){const i=$("#info");if(!i)return;const offen=t.stopps.filter(s=>!s.erledigt).length,fehlt=t.stopps.filter(s=>s.lat==null).length;
+  i.replaceChildren(...[h("span",{},`${t.stopps.length} Stopps · ${offen} offen`),fehlt?h("span",{style:"color:var(--rot)"},`${fehlt} nicht gefunden`):null,
+    strecke&&strecke.key===streckeKey?h("span",{},`ca. ${kmT(strecke.km)} km · ${zeitT(strecke.min)}`):h("span",{},t.stopps.length?"Strecke wird berechnet …":"")].filter(Boolean))}
+function untenZeichnen(t){const u=$("#unten");if(!u)return;const n=naechster(t),idx=n?t.stopps.indexOf(n)+1:0;
+  if(n)u.replaceChildren(h("div",{class:"ziel"},`Nächster Stopp ${idx}: ${n.name?n.name+", ":""}${n.text}`),h("button",{class:"haupt",onclick:()=>navigiere(n)},`Zum Stopp ${idx} navigieren`));
+  else if(t.stopps.length&&t.zurueck!==false&&D.einst.start)u.replaceChildren(h("div",{class:"ziel"},"Alle Stopps erledigt."),h("button",{class:"haupt",onclick:()=>navigiere(D.einst.start)},"Zurück zum Start navigieren"));
+  else u.replaceChildren(h("div",{class:"ziel"},t.stopps.length?"Alle Stopps erledigt.":"Noch keine Stopps. Oben „+ Adresse“ oder „Liste einfügen“."))}
+function listeZeichnen(t){const l=$("#liste");if(!l)return;const n=naechster(t);
+  l.replaceChildren(...t.stopps.map((s,i)=>{
+    const griff=h("div",{class:"griff","aria-label":"Ziehen zum Verschieben"},"⋮⋮");
+    const zeile=h("div",{class:"stopp"+(s.erledigt?" fertig":"")+(s===n?" naechster":"")+(s.lat==null?" fehlt":""),"data-id":s.id},griff,h("div",{class:"nr"},s.erledigt?"✓":i+1),
+      h("div",{class:"st",onclick:()=>stoppDialog(t,s)},s.name?h("b",{},s.name):null,h("div",{class:"a"},s.text),s.lat==null?h("div",{class:"klein",style:"color:var(--rot)"},"nicht gefunden: antippen und korrigieren"):null,
+        s.notiz?h("div",{class:"klein"},s.notiz):null,strecke&&strecke.key===streckeKey&&strecke.zu[s.id]?h("div",{class:"klein"},`+${kmT(strecke.zu[s.id].km)} km · ${zeitT(strecke.zu[s.id].min)}`):null),
+      h("button",{class:"haken","aria-label":s.erledigt?"Wieder öffnen":"Erledigt",onclick:()=>{s.erledigt=!s.erledigt;speichern();aktualisiere(t)}},"✓"));
+    ziehen(t,griff,zeile,l);return zeile}))}
+// Reihenfolge mit dem Finger: am Griff ziehen, die Zeile wandert mit, beim Loslassen wird die neue Reihenfolge gespeichert
+function ziehen(t,griff,zeile,l){
+  griff.addEventListener("pointerdown",e=>{e.preventDefault();griff.setPointerCapture(e.pointerId);zeile.classList.add("zieht");
+    const move=ev=>{const y=ev.clientY;if(y<80)window.scrollBy(0,-14);else if(y>innerHeight-150)window.scrollBy(0,14);
+      let vor=null;for(const x of l.children){if(x===zeile)continue;const r=x.getBoundingClientRect();if(y<r.top+r.height/2){vor=x;break}}
+      if(vor!==zeile.nextSibling&&vor!==zeile)l.insertBefore(zeile,vor)};
+    const ende=()=>{griff.removeEventListener("pointermove",move);zeile.classList.remove("zieht");
+      const ids=[...l.children].map(x=>x.dataset.id),vorher=t.stopps.map(s=>s.id).join();t.stopps.sort((a,b)=>ids.indexOf(a.id)-ids.indexOf(b.id));
+      if(t.stopps.map(s=>s.id).join()!==vorher){speichern();aktualisiere(t)}else listeZeichnen(t)};
+    griff.addEventListener("pointermove",move);griff.addEventListener("pointerup",ende,{once:true});griff.addEventListener("pointercancel",ende,{once:true})})}
+async function stoppDialog(t,s){
+  const i=t.stopps.indexOf(s);
+  const name=h("input",{value:s.name||"",placeholder:"Name (freiwillig)"}),tel=h("input",{value:s.tel||"",placeholder:"Telefon (freiwillig)",type:"tel"}),notiz=h("textarea",{rows:2,placeholder:"Notiz, z. B. Hinterhof, 2. Etage",value:s.notiz||""});
+  const knopf=(text,fn,kl="")=>h("button",{class:kl,onclick:e=>{e.target.closest(".dlg-bg").remove();uebernehmen();fn()}},text);
+  const uebernehmen=()=>{s.name=name.value.trim();s.tel=tel.value.trim();s.notiz=notiz.value.trim();speichern();aktualisiere(t)};
+  const w=await dialog(`Stopp ${i+1}`,h("div",{},h("p",{style:"margin:0 0 10px"},s.text),
+      h("label",{class:"feld"},"Name",name),h("label",{class:"feld"},"Telefon",tel),h("label",{class:"feld"},"Notiz",notiz),
+      h("div",{class:"reihe"},knopf("Navigieren",()=>navigiere(s),"haupt"),s.tel?knopf("Anrufen",()=>{location.href="tel:"+s.tel.replace(/[^\d+]/g,"")}):null),
+      h("div",{class:"reihe"},knopf("▲ Nach oben",()=>{if(i>0){t.stopps.splice(i,1);t.stopps.splice(i-1,0,s);speichern();aktualisiere(t)}}),knopf("▼ Nach unten",()=>{if(i<t.stopps.length-1){t.stopps.splice(i,1);t.stopps.splice(i+1,0,s);speichern();aktualisiere(t)}})),
+      h("div",{class:"reihe"},knopf("Adresse ändern",()=>adresseSuchen("Adresse ändern",{beiWahl:x=>{Object.assign(s,{text:x.text,lat:x.lat,lon:x.lon});speichern();aktualisiere(t)}})),
+        knopf("Stopp löschen",async()=>{if(await frage("Stopp löschen",`${s.text} aus der Tour löschen?`,"Löschen","rot")){t.stopps=t.stopps.filter(x=>x!==s);speichern();aktualisiere(t)}},"rot"))),
+    [{text:"Fertig",klasse:"haupt",wert:"ok"}]);
+  uebernehmen()}
+async function listeEinfuegen(t){
+  const f=h("textarea",{rows:8,placeholder:"Eine Adresse pro Zeile, z. B.\nHauptstraße 5, 03046 Cottbus\nMüller, Bahnhofstr. 12, Cottbus"});
+  const w=await dialog("Liste einfügen",h("div",{},h("p",{class:"klein",style:"margin-top:0"},"Eine Adresse pro Zeile. Steht vorne ein Name mit Komma, wird er als Name übernommen. Die Adressen kommen in dieser Reihenfolge ans Ende der Tour."),f),
+    [{text:"Abbrechen",wert:null},{text:"Einlesen",klasse:"haupt",wert:"ok"}]);
+  if(w!=="ok")return;const zeilen=f.value.split(/\r?\n/).map(z=>z.trim()).filter(Boolean);if(!zeilen.length)return;
+  einlesen(t,zeilen.map(z=>({q:z,mitName:true})))}
+// Gemeinsam für Liste und Excel: e = {q: Adresse, mitName, name, tel, notiz}; nacheinander suchen, nicht gefundene rot anlegen
+async function einlesen(t,eintraege){
+  let n=0,fehlt=0;toast(`Adressen werden gesucht: 0 von ${eintraege.length}`);
+  for(const e of eintraege){let r=null;const imSpeicher=!!D.cache[(e.mitName?"":"a:")+e.q.trim().toLowerCase()];
+    try{r=await finde(e.q,!!e.mitName)}catch(x){}
+    if(!imSpeicher)await new Promise(ok=>setTimeout(ok,350)); // die freie Adresssuche nicht überlasten
+    n++;if(!r)fehlt++;
+    t.stopps.push({id:neuId(),text:r?r.text:e.q,lat:r?r.lat:null,lon:r?r.lon:null,name:e.name||(r&&r.name)||"",tel:e.tel||"",notiz:e.notiz||"",erledigt:false});
+    speichern();if(seite.id===t.id)aktualisiere(t,true);toast(`Adressen werden gesucht: ${n} von ${eintraege.length}`)}
+  if(seite.id===t.id)aktualisiere(t);toast(fehlt?`${eintraege.length-fehlt} gefunden, ${fehlt} nicht gefunden (rot, bitte antippen und korrigieren).`:`Alle ${eintraege.length} Adressen gefunden.`)}
+/* Excel (.xlsx, .xls, .csv): SheetJS wird erst beim ersten Gebrauch geladen. Spalten werden an der Kopfzeile erkannt,
+   ohne Kopfzeile gilt jede Zeile als eine Adresse (Zellen mit Komma verbunden). */
+async function excelLaden(){if(window.XLSX)return;await new Promise((ok,nein)=>{const s=document.createElement("script");s.src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";s.onload=ok;s.onerror=()=>nein(new Error("laden"));document.head.append(s)})}
+function excelZeilen(rows){rows=rows.filter(r=>r.some(c=>String(c).trim()));if(!rows.length)return[];
+  // Überschriften enthalten keine Ziffern; so wird „Waisenstraße 22“ in der ersten Zeile nicht für eine Kopfzeile gehalten
+  const kopf=rows[0].map(c=>String(c).toLowerCase().trim()),such=re=>kopf.findIndex(c=>re.test(c)&&!/\d/.test(c));
+  const sp={name:such(/^(name|kunde|empfänger|empfaenger|firma)/),str:such(/stra(ss|ß)e|^adresse|anschrift/),nr:such(/^hausn|^hnr|^nr\.?$/),plz:such(/^plz|postleitzahl/),
+    ort:such(/^(ort|stadt|wohnort)/),tel:such(/^tel|telefon|handy|mobil/),notiz:such(/notiz|bemerk|hinweis|^info/)};
+  if(sp.str<0&&sp.plz<0&&sp.ort<0)return rows.map(r=>({q:r.map(c=>String(c).trim()).filter(Boolean).join(", "),mitName:true}));
+  const g=(r,i)=>i>=0?String(r[i]).trim():"";
+  return rows.slice(1).map(r=>({q:[[g(r,sp.str),sp.str>=0?g(r,sp.nr):""].filter(Boolean).join(" "),[g(r,sp.plz),g(r,sp.ort)].filter(Boolean).join(" ")].filter(Boolean).join(", "),
+    name:g(r,sp.name),tel:g(r,sp.tel),notiz:g(r,sp.notiz)})).filter(e=>e.q)}
+function excelEinlesen(t){const inp=h("input",{type:"file",accept:".xlsx,.xls,.csv,.ods"});
+  inp.addEventListener("change",async()=>{const f=inp.files[0];if(!f)return;
+    try{await excelLaden()}catch(e){toast("Der Excel-Leser lädt nicht. Ist das Handy online?");return}
+    let rows;try{const wb=XLSX.read(await f.arrayBuffer(),{type:"array"});rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:false,defval:""})}
+    catch(e){toast("Die Datei ließ sich nicht lesen.");return}
+    const e=excelZeilen(rows);if(!e.length){toast("In der Datei wurden keine Adressen gefunden.");return}
+    if(await frage("Excel einlesen",`${e.length} Adressen gefunden (erste: ${e[0].q}). Ans Ende der Tour anfügen?`,"Einlesen"))einlesen(t,e)});
+  inp.click()}
+window.__excelZeilen=excelZeilen; // zum Prüfen
+
+/* ---------- Karte und Strecke ---------- */
+function punkte(t){const p=[];if(D.einst.start)p.push({...D.einst.start,id:"start"});for(const s of t.stopps)if(s.lat!=null)p.push(s);if(t.zurueck!==false&&D.einst.start&&t.stopps.length)p.push({...D.einst.start,id:"ende"});return p}
+function karteZeichnen(einpassen){const t=tour(seite.id),el=$("#karte");if(!t||!el||typeof L==="undefined")return;
+  if(!karte){karte=L.map(el,{zoomControl:true});let fehler=0;
+    const osm=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"});
+    osm.on("tileerror",()=>{if(++fehler===4){karte.removeLayer(osm);L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap, © CARTO"}).addTo(karte)}});
+    osm.addTo(karte);schicht=L.layerGroup().addTo(karte);karte.setView(D.einst.start?[D.einst.start.lat,D.einst.start.lon]:[51.16,10.45],D.einst.start?12:6);einpassen=true}
+  schicht.clearLayers();const n=naechster(t);
+  const pin=(lat,lon,txt,kl,fn)=>{const m=L.marker([lat,lon],{icon:L.divIcon({className:"pin "+kl,html:txt,iconSize:[28,28],iconAnchor:[14,14]})}).addTo(schicht);if(fn)m.on("click",fn)};
+  if(D.einst.start)pin(D.einst.start.lat,D.einst.start.lon,"S","start");
+  t.stopps.forEach((s,i)=>{if(s.lat!=null)pin(s.lat,s.lon,String(i+1),s.erledigt?"fertig":s===n?"naechster":"",()=>stoppDialog(t,s))});
+  if(strecke&&strecke.key===streckeKey&&strecke.geo.length)L.polyline(strecke.geo,{color:"#0f6e74",weight:5,opacity:.75}).addTo(schicht);
+  if(einpassen){karte.invalidateSize();const p=punkte(t);if(p.length>1)karte.fitBounds(p.map(x=>[x.lat,x.lon]),{padding:[30,30]});else if(p.length===1)karte.setView([p[0].lat,p[0].lon],14)}}
+// Strecke in der festgelegten Reihenfolge (OSRM, in Stücken von höchstens 80 Punkten, damit es keine Obergrenze gibt)
+function streckeHolen(){clearTimeout(streckeT);streckeT=setTimeout(async()=>{const t=tour(seite.id);if(!t)return;const p=punkte(t);
+  const key=p.map(x=>x.lat.toFixed(5)+","+x.lon.toFixed(5)).join(";");streckeKey=key;
+  if(p.length<2){strecke=null;infoZeichnen(t);return}if(strecke&&strecke.key===key){karteZeichnen(false);return}
+  try{let geo=[],km=0,min=0;const zu={};
+    for(let i=0;i<p.length-1;i+=79){const teil=p.slice(i,i+80);if(teil.length<2)break;
+      const r=await fetch(OSRM+teil.map(x=>`${x.lon.toFixed(6)},${x.lat.toFixed(6)}`).join(";")+"?overview=full&geometries=geojson");const j=await r.json();
+      if(j.code!=="Ok")throw new Error(j.code);const rt=j.routes[0];geo.push(...rt.geometry.coordinates.map(c=>[c[1],c[0]]));km+=rt.distance/1000;min+=rt.duration/60;
+      rt.legs.forEach((lg,k)=>{const ziel=teil[k+1];if(ziel.id&&ziel.id!=="ende")zu[ziel.id]={km:lg.distance/1000,min:lg.duration/60}})}
+    if(streckeKey!==key)return;strecke={key,geo,km,min,zu};
+    if(seite.art==="tour"&&seite.id===t.id){karteZeichnen(false);infoZeichnen(t);listeZeichnen(t)}}
+  catch(e){console.warn(e);const i=$("#info");if(i&&streckeKey===key)i.lastChild&&(i.lastChild.textContent="Strecke gerade nicht verfügbar (Internet?)")}},700)}
+
+window.__liefertour={get D(){return D},packe,entpacke,tourDaten}; // zum Prüfen
+zeige();linkPruefen();
+// Für den Startbildschirm und schnelleres Öffnen (nur im Internet, nicht beim Öffnen als Datei)
+if("serviceWorker" in navigator&&online())navigator.serviceWorker.register("sw.js").catch(()=>{});
+})();
+</script>
+</body></html>
