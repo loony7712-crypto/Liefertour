@@ -47,6 +47,22 @@ main{padding:12px;padding-bottom:110px;max-width:760px;margin:0 auto}
 .vorschl{display:flex;flex-direction:column;gap:6px;margin-top:8px}.vorschl button{text-align:left}
 .feld{display:flex;flex-direction:column;gap:4px;font-size:14px;color:var(--mut);margin-bottom:10px}
 .wahl{display:grid;grid-template-columns:1fr 1fr;gap:8px}.wahl button.an{background:var(--accbg);border:2px solid var(--acc);font-weight:600}
+/* Fahrmodus: groß, wenig Text, Knöpfe im Daumenbereich unten */
+.fahrt{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;background:#eef2f4}
+.fahrt-kopf{display:flex;align-items:center;gap:8px;padding:8px 10px;padding-top:max(8px,env(safe-area-inset-top));background:var(--card);border-bottom:1px solid var(--line)}
+.fahrt-kopf b{flex:1;text-align:center;font-size:18px}
+.fahrt-mitte{flex:1;padding:14px;display:flex;flex-direction:column;gap:10px}
+.fahrt-karte{background:var(--card);border-radius:18px;padding:16px;border:2px solid var(--acc)}
+.fahrt-karte .gnr{width:54px;height:54px;border-radius:50%;background:#e65100;color:#fff;font:700 26px Arial;display:flex;align-items:center;justify-content:center;margin-bottom:8px}
+.fahrt-karte .fn{font-size:24px;font-weight:700;line-height:1.2}
+.fahrt-karte .fa{font-size:22px;line-height:1.3;margin-top:4px;overflow-wrap:anywhere}
+.fahrt-karte .fz{background:var(--gelbbg);color:var(--gelb);border-radius:10px;padding:8px 10px;margin-top:10px;font-size:18px}
+.danach{font-size:16px;color:var(--mut);padding:0 4px}
+.fahrt-unten{padding:10px 12px;padding-bottom:max(12px,env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px;background:var(--card);border-top:1px solid var(--line)}
+.fahrt-unten .klein3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.fahrt-unten .klein3 button{min-height:56px;font-size:16px}
+.fahrt-unten .nav{min-height:64px;font-size:20px;border:2px solid var(--acc);color:var(--acc);font-weight:600;border-radius:16px}
+.fahrt-unten .weiter{min-height:88px;font-size:23px;font-weight:700;background:var(--ok);color:#fff;border-color:var(--ok);border-radius:18px}
+.unten .start{background:var(--ok);border-color:var(--ok);color:#fff;font-weight:700;min-height:64px;font-size:21px}
 #toast{position:fixed;left:50%;bottom:120px;transform:translateX(-50%);background:#22303d;color:#fff;padding:12px 18px;border-radius:12px;display:none;z-index:2000;max-width:90vw;text-align:center}
 </style></head><body>
 <div id="app"></div><div id="toast"></div>
@@ -117,9 +133,12 @@ function adresseSuchen(titel,{mehrfach=false,beiWahl}){
 
 /* ---------- Seiten ---------- */
 let seite={art:"touren"};
-function geh(s){seite=s;if(karte){karte.remove();karte=null}window.scrollTo(0,0);zeige()}
-function zeige(){const a=$("#app");if(seite.art==="tour"&&tour(seite.id))a.replaceChildren(...tourSeite(tour(seite.id)));else if(seite.art==="einst")a.replaceChildren(...einstSeite());else{seite={art:"touren"};a.replaceChildren(...tourenSeite())}
-  if(seite.art==="tour"){const t=tour(seite.id);setTimeout(()=>{aktualisiere(t,true);karteZeichnen(true);gezeigt=punkte(t).length;streckeHolen()},30)}}
+// Die zuletzt offene Ansicht wird gemerkt: Lädt das Handy die App nach dem Navigieren neu, geht es im Fahrmodus weiter
+function geh(s){seite=s;D.ansicht={art:s.art,id:s.id||null};speichern();if(karte){karte.remove();karte=null}window.scrollTo(0,0);wachHalten(s.art==="fahrt");zeige()}
+function zeige(){const a=$("#app");if(seite.art==="fahrt"&&tour(seite.id))a.replaceChildren(fahrtSeite(tour(seite.id)));
+  else if(seite.art==="tour"&&tour(seite.id))a.replaceChildren(...tourSeite(tour(seite.id)));else if(seite.art==="einst")a.replaceChildren(...einstSeite());else{seite={art:"touren"};a.replaceChildren(...tourenSeite())}
+  if(seite.art==="tour"){const t=tour(seite.id);setTimeout(()=>{aktualisiere(t,true);karteZeichnen(true);gezeigt=punkte(t).length;streckeHolen()},30)}
+  if(seite.art==="fahrt")streckeHolen()}
 
 function tourenSeite(){
   const neu=async()=>{const n=await eingabe("Neue Tour",`Tour ${datum()}`);if(n==null)return;const t={id:neuId(),name:n||`Tour ${datum()}`,erstellt:Date.now(),zurueck:true,stopps:[]};D.touren.unshift(t);speichern();geh({art:"tour",id:t.id})};
@@ -213,13 +232,14 @@ function tourSeite(t){
     h("div",{class:"unten",id:"unten"})]}
 // Kommen Stopps dazu oder fallen weg, zeigt die Karte wieder alle; beim Abhaken oder Verschieben bleibt der Ausschnitt
 let gezeigt=-1;
-function aktualisiere(t,ohneKarte){listeZeichnen(t);untenZeichnen(t);infoZeichnen(t);
+function aktualisiere(t,ohneKarte){if(seite.art==="fahrt"){zeige();return}listeZeichnen(t);untenZeichnen(t);infoZeichnen(t);
   if(!ohneKarte){const n=punkte(t).length;karteZeichnen(n!==gezeigt);gezeigt=n;streckeHolen()}}
 function infoZeichnen(t){const i=$("#info");if(!i)return;const offen=t.stopps.filter(s=>!s.erledigt).length,fehlt=t.stopps.filter(s=>s.lat==null).length;
   i.replaceChildren(...[h("span",{},`${t.stopps.length} Stopps · ${offen} offen`),fehlt?h("span",{style:"color:var(--rot)"},`${fehlt} nicht gefunden`):null,
     strecke&&strecke.key===streckeKey?h("span",{},`ca. ${kmT(strecke.km)} km · ${zeitT(strecke.min)}`):h("span",{},t.stopps.length?"Strecke wird berechnet …":"")].filter(Boolean))}
 function untenZeichnen(t){const u=$("#unten");if(!u)return;const n=naechster(t),idx=n?t.stopps.indexOf(n)+1:0;
-  if(n)u.replaceChildren(h("div",{class:"ziel"},`Nächster Stopp ${idx}: ${n.name?n.name+", ":""}${n.text}`),h("button",{class:"haupt",onclick:()=>navigiere(n)},`Zum Stopp ${idx} navigieren`));
+  if(n)u.replaceChildren(h("div",{class:"ziel"},`Nächster Stopp ${idx}: ${n.name?n.name+", ":""}${n.text}`),
+    h("button",{class:"start",onclick:()=>{geh({art:"fahrt",id:t.id});navigiere(n)}},t.stopps.some(s=>s.erledigt)?`▶ Fahrt fortsetzen (Stopp ${idx})`:"▶ Fahrt starten"));
   else if(t.stopps.length&&t.zurueck!==false&&D.einst.start)u.replaceChildren(h("div",{class:"ziel"},"Alle Stopps erledigt."),h("button",{class:"haupt",onclick:()=>navigiere(D.einst.start)},"Zurück zum Start navigieren"));
   else u.replaceChildren(h("div",{class:"ziel"},t.stopps.length?"Alle Stopps erledigt.":"Noch keine Stopps. Oben „+ Adresse“ oder „Liste einfügen“."))}
 function listeZeichnen(t){const l=$("#liste");if(!l)return;const n=naechster(t);
@@ -291,6 +311,40 @@ function excelEinlesen(t){const inp=h("input",{type:"file",accept:".xlsx,.xls,.c
   inp.click()}
 window.__excelZeilen=excelZeilen; // zum Prüfen
 
+/* ---------- Fahrmodus (Wunsch 31.10.2026): während der Fahrt nur große Knöpfe.
+   Ein Tipp auf „Erledigt – weiter“ hakt den Stopp ab und startet sofort die Navigation zum nächsten. ---------- */
+let wachSperre=null,letzterErledigt=null;
+async function wachHalten(an){ // Bildschirm im Fahrmodus nicht ausgehen lassen (wo der Browser es kann)
+  try{if(an&&"wakeLock" in navigator&&!wachSperre){wachSperre=await navigator.wakeLock.request("screen");wachSperre.addEventListener("release",()=>{wachSperre=null})}
+    else if(!an&&wachSperre){await wachSperre.release();wachSperre=null}}catch(e){}}
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&seite.art==="fahrt"){wachHalten(true);zeige()}});
+function fahrtSeite(t){
+  const n=naechster(t),idx=n?t.stopps.indexOf(n)+1:0,fertig=t.stopps.filter(s=>s.erledigt).length;
+  const nachN=n?t.stopps.slice(idx).find(s=>!s.erledigt):null,nachIdx=nachN?t.stopps.indexOf(nachN)+1:0;
+  const zurStart=t.zurueck!==false&&D.einst.start;
+  const kopf=h("div",{class:"fahrt-kopf"},h("button",{onclick:()=>geh({art:"tour",id:t.id})},"← Liste"),h("b",{},n?`Stopp ${idx} von ${t.stopps.length}`:t.name),h("span",{class:"klein"},`${fertig} ✓`));
+  if(!n)return h("div",{class:"fahrt"},kopf,h("div",{class:"fahrt-mitte"},h("div",{class:"fahrt-karte",style:"border-color:var(--ok);text-align:center"},h("div",{class:"fn"},"Alle Stopps erledigt"),h("div",{class:"klein",style:"margin-top:6px"},`${t.stopps.length} Stopps in „${t.name}“`))),
+    h("div",{class:"fahrt-unten"},letzterErledigt?h("button",{onclick:rueckgaengig},"↶ Letzten Haken zurücknehmen"):null,
+      zurStart?h("button",{class:"weiter",onclick:()=>navigiere(D.einst.start)},"Zurück zum Start navigieren"):null,h("button",{class:"nav",onclick:()=>geh({art:"tour",id:t.id})},"Zur Tour-Liste")));
+  const zu=strecke&&strecke.key===streckeKey&&strecke.zu[n.id];
+  const weiterText=nachN?`✓ Erledigt – weiter zu ${nachIdx}`:zurStart?"✓ Erledigt – zurück zum Start":"✓ Erledigt – Tour fertig";
+  function weiter(){n.erledigt=true;letzterErledigt=n.id;speichern();if(navigator.vibrate)navigator.vibrate(40);zeige();
+    if(nachN)navigiere(nachN);else if(zurStart)navigiere(D.einst.start)}
+  function spaeter(){t.stopps.splice(t.stopps.indexOf(n),1);t.stopps.push(n);speichern();toast(`Stopp ans Ende verschoben.${nachN?" Weiter mit "+(nachN.name||nachN.text):""}`);zeige()}
+  function rueckgaengig(){const s=t.stopps.find(x=>x.id===letzterErledigt);if(s){s.erledigt=false;letzterErledigt=null;speichern();zeige();toast("Haken zurückgenommen.")}}
+  window.__rueckgaengig=rueckgaengig;
+  return h("div",{class:"fahrt"},kopf,
+    h("div",{class:"fahrt-mitte"},
+      h("div",{class:"fahrt-karte",onclick:()=>stoppDialog(t,n)},h("div",{class:"gnr"},idx),n.name?h("div",{class:"fn"},n.name):null,h("div",{class:"fa"},n.text),
+        n.lat==null?h("div",{class:"fz",style:"background:var(--rotbg);color:var(--rot)"},"Adresse nicht gefunden: hier tippen und korrigieren"):null,
+        n.notiz?h("div",{class:"fz"},n.notiz):null,zu?h("div",{class:"klein",style:"margin-top:8px"},`ca. ${kmT(zu.km)} km · ${zeitT(zu.min)} ab dem letzten Stopp`):null),
+      nachN?h("div",{class:"danach"},`Danach: ${nachIdx} · ${nachN.name?nachN.name+", ":""}${nachN.text}`):h("div",{class:"danach"},zurStart?"Danach: zurück zum Start":"Das ist der letzte Stopp.")),
+    h("div",{class:"fahrt-unten"},
+      h("div",{class:"klein3"},h("button",{onclick:()=>{if(n.tel)location.href="tel:"+n.tel.replace(/[^\d+]/g,"");else toast("Keine Telefonnummer bei diesem Stopp.")},style:n.tel?"":"opacity:.45"},"Anrufen"),
+        h("button",{onclick:spaeter},"Später"),h("button",{onclick:rueckgaengig,style:letzterErledigt?"":"opacity:.45"},"↶ Zurück")),
+      h("button",{class:"nav",onclick:()=>navigiere(n)},`Navigieren zu ${idx}`),
+      h("button",{class:"weiter",onclick:weiter},weiterText)))}
+
 /* ---------- Karte und Strecke ---------- */
 function punkte(t){const p=[];if(D.einst.start)p.push({...D.einst.start,id:"start"});for(const s of t.stopps)if(s.lat!=null)p.push(s);if(t.zurueck!==false&&D.einst.start&&t.stopps.length)p.push({...D.einst.start,id:"ende"});return p}
 function karteZeichnen(einpassen){const t=tour(seite.id),el=$("#karte");if(!t||!el||typeof L==="undefined")return;
@@ -314,10 +368,13 @@ function streckeHolen(){clearTimeout(streckeT);streckeT=setTimeout(async()=>{con
       if(j.code!=="Ok")throw new Error(j.code);const rt=j.routes[0];geo.push(...rt.geometry.coordinates.map(c=>[c[1],c[0]]));km+=rt.distance/1000;min+=rt.duration/60;
       rt.legs.forEach((lg,k)=>{const ziel=teil[k+1];if(ziel.id&&ziel.id!=="ende")zu[ziel.id]={km:lg.distance/1000,min:lg.duration/60}})}
     if(streckeKey!==key)return;strecke={key,geo,km,min,zu};
-    if(seite.art==="tour"&&seite.id===t.id){karteZeichnen(false);infoZeichnen(t);listeZeichnen(t)}}
+    if(seite.art==="tour"&&seite.id===t.id){karteZeichnen(false);infoZeichnen(t);listeZeichnen(t)}
+    if(seite.art==="fahrt"&&seite.id===t.id)zeige()}
   catch(e){console.warn(e);const i=$("#info");if(i&&streckeKey===key)i.lastChild&&(i.lastChild.textContent="Strecke gerade nicht verfügbar (Internet?)")}},700)}
 
 window.__liefertour={get D(){return D},packe,entpacke,tourDaten}; // zum Prüfen
+if(D.ansicht&&(D.ansicht.art==="fahrt"||D.ansicht.art==="tour")&&tour(D.ansicht.id))seite={art:D.ansicht.art,id:D.ansicht.id};
+if(seite.art==="fahrt")wachHalten(true);
 zeige();linkPruefen();
 // Für den Startbildschirm und schnelleres Öffnen (nur im Internet, nicht beim Öffnen als Datei)
 if("serviceWorker" in navigator&&online())navigator.serviceWorker.register("sw.js").catch(()=>{});
