@@ -47,6 +47,16 @@ main{padding:12px;padding-bottom:110px;max-width:760px;margin:0 auto}
 .vorschl{display:flex;flex-direction:column;gap:6px;margin-top:8px}.vorschl button{text-align:left}
 .feld{display:flex;flex-direction:column;gap:4px;font-size:14px;color:var(--mut);margin-bottom:10px}
 .wahl{display:grid;grid-template-columns:1fr 1fr;gap:8px}.wahl button.an{background:var(--accbg);border:2px solid var(--acc);font-weight:600}
+/* Liefertage und Urlaub (Spec 002) */
+.tage{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px}.tage button{padding:6px 0;min-height:44px;font-size:15px}
+.tage button.an{background:var(--accbg);border:2px solid var(--acc);color:var(--acc);font-weight:700}
+.tage.schnell{grid-template-columns:repeat(4,1fr)}.tage.schnell button{font-size:14px}
+.url{display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--gelbbg);color:var(--gelb);border-radius:10px;padding:4px 4px 4px 10px;margin-bottom:6px}.url button{min-height:38px;padding:4px 10px}
+.tagleiste{display:flex;gap:6px;margin-bottom:6px}.tagleiste button{flex:1;min-height:40px;padding:4px 6px;font-size:15px}.tagleiste button.an{background:var(--accbg);border:2px solid var(--acc);font-weight:600}
+.tagtext{font-size:15px;margin:0 2px 8px}.tagtext.vorschau{background:var(--gelbbg);color:var(--gelb);border-radius:10px;padding:8px 10px}
+.marke{display:inline-block;font-size:13px;border-radius:8px;padding:1px 7px;margin-top:3px;background:var(--accbg);color:var(--acc)}.marke.urlaub{background:var(--gelbbg);color:var(--gelb)}
+.nicht-kopf{font-size:15px;color:var(--mut);margin:14px 2px 6px;font-weight:600}
+.stopp.nicht{background:#eef1f3;border-style:dashed}.stopp.nicht .nr{background:#9aa6b0}
 /* Fahrmodus: groß, wenig Text, Knöpfe im Daumenbereich unten */
 .fahrt{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;background:#eef2f4}
 .fahrt-kopf{display:flex;align-items:center;gap:8px;padding:8px 10px;padding-top:max(8px,env(safe-area-inset-top));background:var(--card);border-bottom:1px solid var(--line)}
@@ -88,6 +98,39 @@ let D=null;try{D=JSON.parse(localStorage.getItem(LS))}catch(e){}
 D=D||{einst:{start:null,nav:/iPhone|iPad|Macintosh/.test(navigator.userAgent)?"apple":"google"},touren:[],cache:{}};
 function speichern(){try{localStorage.setItem(LS,JSON.stringify(D))}catch(e){toast("Speichern hat nicht geklappt. Ist der Speicher voll?")}}
 const tour=id=>D.touren.find(t=>t.id===id);
+
+/* ---------- Liefertage und Urlaub (Spec 002, 31.10.2026) ----------
+   s.tage: Wochentage wie Date.getDay() (0 = So), fehlt = jeden Tag. s.urlaub: [{von,bis}] als „JJJJ-MM-TT“, bis = letzter Urlaubstag.
+   s.erledigtAm: Tag des Hakens; Haken von früheren Tagen werden am neuen Tag zurückgesetzt. */
+const TAGE=["So","Mo","Di","Mi","Do","Fr","Sa"],TAGLANG=["sonntags","montags","dienstags","mittwochs","donnerstags","freitags","samstags"],ORDNUNG=[1,2,3,4,5,6,0];
+const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+const heuteIso=()=>iso(new Date());
+const dT=s=>s.slice(8,10)+"."+s.slice(5,7)+".";
+const tagName=s=>new Date(s+"T12:00").toLocaleDateString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit"});
+let ansichtTag=null; // null = heute; sonst ein anderer Tag nur zum Ansehen (Fahrmodus gilt immer für heute)
+const tagIso=()=>ansichtTag||heuteIso();
+function tageText(tage){if(!tage||tage.length===7)return"jeden Tag";const o=ORDNUNG.filter(d=>tage.includes(d)),p=o.map(d=>ORDNUNG.indexOf(d));
+  return o.length>=3&&p[p.length-1]-p[0]===o.length-1?`${TAGE[o[0]]}–${TAGE[o[o.length-1]]}`:o.map(d=>TAGE[d]).join(", ")}
+// „Mo-Sa“, „Di – Sa“, „Mo bis Fr“, „Mo, Mi, Fr“, „täglich“ (Excel-Spalte Liefertage)
+function tageLesen(txt){const s=String(txt||"").toLowerCase().replace(/\s*(?:-|–|bis)\s*/g,"-").trim();if(!s||/tägl|taegl|jeden|alle/.test(s))return null;
+  const nr=w=>["so","mo","di","mi","do","fr","sa"].indexOf(w.slice(0,2)),aus=new Set();
+  for(const teil of s.split(/[\s,;/+]+/)){const [a,b]=teil.split("-");
+    if(b!=null&&nr(a)>=0&&nr(b)>=0){let i=ORDNUNG.indexOf(nr(a));const e=ORDNUNG.indexOf(nr(b));for(let k=0;k<7;k++){aus.add(ORDNUNG[i]);if(i===e)break;i=(i+1)%7}}
+    else if(nr(a)>=0)aus.add(nr(a))}
+  return aus.size&&aus.size<7?[...aus].sort():null}
+// Warum ein Kunde an diesem Tag nicht beliefert wird; leer = er ist dran
+function grund(s,tag){const u=(s.urlaub||[]).find(u=>u.von<=tag&&tag<=u.bis);if(u)return`Urlaub bis ${dT(u.bis)}`;
+  const wt=new Date(tag+"T12:00").getDay();return s.tage&&!s.tage.includes(wt)?`nicht ${TAGLANG[wt]} (nur ${tageText(s.tage)})`:""}
+const heuteListe=(t,tag=tagIso())=>t.stopps.filter(s=>!grund(s,tag));
+const fertig=s=>s.erledigt&&!ansichtTag; // in der Vorschau für einen anderen Tag ist alles offen
+function abhaken(s,an){s.erledigt=an;if(an)s.erledigtAm=heuteIso();else delete s.erledigtAm}
+// Tageswechsel: Haken von früheren Tagen zurücksetzen, vorbei gegangene Urlaube entfernen
+function tagesWechsel(){const h0=heuteIso();let neu=false;
+  for(const t of D.touren)for(const s of t.stopps){
+    if(s.erledigt&&!s.erledigtAm){s.erledigtAm=h0;neu=true} // Haken aus der Zeit vor Spec 002 gelten als von heute
+    if(s.erledigt&&s.erledigtAm<h0){abhaken(s,false);neu=true}
+    if(s.urlaub){const u=s.urlaub.filter(x=>x.bis>=h0);if(u.length!==s.urlaub.length){neu=true;if(u.length)s.urlaub=u;else delete s.urlaub}}}
+  if(neu)speichern();return neu}
 
 /* ---------- Adresssuche (Photon, OpenStreetMap) ---------- */
 function bias(){const s=D.einst.start;return s?`&lat=${s.lat}&lon=${s.lon}`:""}
@@ -135,7 +178,7 @@ function adresseSuchen(titel,{mehrfach=false,beiWahl}){
 /* ---------- Seiten ---------- */
 let seite={art:"touren"};
 // Die zuletzt offene Ansicht wird gemerkt: Lädt das Handy die App nach dem Navigieren neu, geht es im Fahrmodus weiter
-function geh(s){seite=s;D.ansicht={art:s.art,id:s.id||null};speichern();if(karte){karte.remove();karte=null}window.scrollTo(0,0);wachHalten(s.art==="fahrt");zeige()}
+function geh(s){seite=s;ansichtTag=null;D.ansicht={art:s.art,id:s.id||null};speichern();if(karte){karte.remove();karte=null}window.scrollTo(0,0);wachHalten(s.art==="fahrt");zeige()}
 function zeige(){const a=$("#app");if(seite.art==="fahrt"&&tour(seite.id))a.replaceChildren(fahrtSeite(tour(seite.id)));
   else if(seite.art==="tour"&&tour(seite.id))a.replaceChildren(...tourSeite(tour(seite.id)));else if(seite.art==="einst")a.replaceChildren(...einstSeite());else{seite={art:"touren"};a.replaceChildren(...tourenSeite())}
   if(seite.art==="tour"){const t=tour(seite.id);setTimeout(()=>{aktualisiere(t,true);karteZeichnen(true);gezeigt=punkte(t).length;streckeHolen()},30)}
@@ -148,8 +191,8 @@ function tourenSeite(){
       !D.einst.start?h("div",{class:"hinweis",onclick:()=>geh({art:"einst"})},"Bitte zuerst unter Einstellungen den Startpunkt eintragen (z. B. das Lager)."):null,
       h("button",{class:"haupt",style:"width:100%;font-size:19px;min-height:56px;margin-bottom:8px",onclick:neu},"+ Neue Tour"),
       h("button",{style:"width:100%;margin-bottom:12px",onclick:dateiOeffnen},"Tour aus Datei öffnen"),
-      D.touren.length?D.touren.map(t=>{const fertig=t.stopps.filter(s=>s.erledigt).length;
-        return h("div",{class:"karte-t tour"},h("div",{class:"t",onclick:()=>geh({art:"tour",id:t.id})},h("b",{},t.name),h("span",{class:"klein"},`${t.stopps.length} Stopps${fertig?` · ${fertig} erledigt`:""}`)),
+      D.touren.length?D.touren.map(t=>{const fertig=t.stopps.filter(s=>s.erledigt).length,heute=heuteListe(t,heuteIso()).length;
+        return h("div",{class:"karte-t tour"},h("div",{class:"t",onclick:()=>geh({art:"tour",id:t.id})},h("b",{},t.name),h("span",{class:"klein"},`${t.stopps.length} Stopps${heute<t.stopps.length?` · heute ${heute}`:""}${fertig?` · ${fertig} erledigt`:""}`)),
           h("button",{onclick:()=>tourMenue(t),"aria-label":"Mehr"},"⋯"))}):h("p",{class:"klein",style:"text-align:center;margin-top:30px"},"Noch keine Touren. Tippe auf „+ Neue Tour“."))]}
 async function tourMenue(t){
   const w=await dialog(t.name,h("div",{style:"display:flex;flex-direction:column;gap:8px"},
@@ -157,7 +200,7 @@ async function tourMenue(t){
   async function aktion(k){
     if(k==="umbenennen"){const n=await eingabe("Name der Tour",t.name);if(n){t.name=n;speichern();zeige()}}
     if(k==="kopie"){const n={...JSON.parse(JSON.stringify(t)),id:neuId(),name:t.name+" (Kopie)",erstellt:Date.now()};n.stopps.forEach(s=>{s.erledigt=false;s.id=neuId()});D.touren.unshift(n);speichern();zeige()}
-    if(k==="offen"){t.stopps.forEach(s=>s.erledigt=false);speichern();zeige()}
+    if(k==="offen"){t.stopps.forEach(s=>abhaken(s,false));speichern();zeige()}
     if(k==="weg"&&await frage("Tour löschen",`„${t.name}“ mit ${t.stopps.length} Stopps löschen?`,"Löschen","rot")){D.touren=D.touren.filter(x=>x!==t);speichern();zeige()}}}
 
 function einstSeite(){
@@ -186,7 +229,9 @@ async function packe(obj){const json=JSON.stringify(obj);
 async function entpacke(s){const buf=unb64(s.slice(1));
   if(s[0]==="z"){const st=new Blob([buf]).stream().pipeThrough(new DecompressionStream("deflate-raw"));return JSON.parse(await new Response(st).text())}
   return JSON.parse(new TextDecoder().decode(buf))}
-const tourDaten=t=>({v:1,n:t.name,z:t.zurueck!==false,st:D.einst.start,s:t.stopps.map(s=>[s.text,s.lat==null?null:+s.lat.toFixed(6),s.lon==null?null:+s.lon.toFixed(6),s.name||"",s.tel||"",s.notiz||""])});
+// Liefertage und Urlaub hängen hinten an (Stelle 6 und 7); ältere Fassungen der App lesen sie einfach nicht mit
+const tourDaten=t=>({v:1,n:t.name,z:t.zurueck!==false,st:D.einst.start,s:t.stopps.map(s=>{const x=[s.text,s.lat==null?null:+s.lat.toFixed(6),s.lon==null?null:+s.lon.toFixed(6),s.name||"",s.tel||"",s.notiz||""];
+  if(s.tage||s.urlaub)x.push(s.tage||null);if(s.urlaub)x.push(s.urlaub.map(u=>[u.von,u.bis]));return x})});
 const appUrl=()=>location.href.split("#")[0].split("?")[0];
 const online=()=>/^https?:$/.test(location.protocol);
 async function perWhatsApp(t){if(!t.stopps.length){toast("Die Tour hat noch keine Stopps.");return}
@@ -201,7 +246,9 @@ async function alsDatei(t){if(!t.stopps.length){toast("Die Tour hat noch keine S
   const a=h("a",{href:URL.createObjectURL(f),download:name});document.body.append(a);a.click();a.remove();toast("Datei gespeichert. Sie lässt sich z. B. per WhatsApp verschicken.")}
 function tourUebernehmen(d){if(!d||!Array.isArray(d.s))throw new Error("kein Tourformat");
   const t={id:neuId(),name:d.n||`Tour ${datum()}`,erstellt:Date.now(),zurueck:d.z!==false,
-    stopps:d.s.map(x=>({id:neuId(),text:String(x[0]||""),lat:x[1]==null?null:+x[1],lon:x[2]==null?null:+x[2],name:x[3]||"",tel:x[4]||"",notiz:x[5]||"",erledigt:false}))};
+    stopps:d.s.map(x=>{const s={id:neuId(),text:String(x[0]||""),lat:x[1]==null?null:+x[1],lon:x[2]==null?null:+x[2],name:x[3]||"",tel:x[4]||"",notiz:x[5]||"",erledigt:false};
+      if(Array.isArray(x[6])&&x[6].length&&x[6].length<7)s.tage=x[6].map(Number).filter(n=>n>=0&&n<7);
+      if(Array.isArray(x[7])&&x[7].length)s.urlaub=x[7].filter(u=>Array.isArray(u)&&u[0]&&u[1]).map(u=>({von:String(u[0]),bis:String(u[1])}));return s})};
   if(!D.einst.start&&d.st&&d.st.lat!=null)D.einst.start=d.st; // eigener Startpunkt bleibt, sonst den des Absenders übernehmen
   D.touren.unshift(t);speichern();return t}
 async function anbieten(d){if(await frage("Tour übernehmen",`Tour „${d.n}“ mit ${d.s.length} Stopps übernehmen?`,"Übernehmen")){const t=tourUebernehmen(d);geh({art:"tour",id:t.id})}}
@@ -213,7 +260,7 @@ window.addEventListener("hashchange",linkPruefen);
 
 /* ---------- Tour ---------- */
 let karte=null,schicht=null,linie=null,strecke=null,streckeKey="",streckeT=null;
-const naechster=t=>t.stopps.find(s=>!s.erledigt);
+const naechster=t=>heuteListe(t).find(s=>!fertig(s));
 function navUrl(p){return D.einst.nav==="apple"?`https://maps.apple.com/?daddr=${p.lat},${p.lon}&dirflg=d`:`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}&travelmode=driving`}
 function navigiere(p){if(p.lat==null){toast("Diese Adresse wurde nicht gefunden. Bitte antippen und korrigieren.");return}window.open(navUrl(p),"_blank")}
 function tourSeite(t){
@@ -221,6 +268,7 @@ function tourSeite(t){
   return[h("header",{},h("button",{onclick:()=>geh({art:"touren"})},"← Touren"),titel),
     h("main",{},
       !D.einst.start?h("div",{class:"hinweis",onclick:()=>geh({art:"einst"})},"Kein Startpunkt eingetragen. Hier tippen."):null,
+      h("div",{id:"tag"}),
       h("div",{id:"karte"},typeof L==="undefined"?h("p",{class:"klein",style:"padding:20px;text-align:center"},"Die Karte braucht Internet."):null),
       h("div",{class:"info",id:"info"}),
       h("div",{class:"reihe"},h("button",{class:"haupt",onclick:()=>adresseSuchen("Adresse hinzufügen",{mehrfach:true,beiWahl:x=>{t.stopps.push({id:neuId(),text:x.text,lat:x.lat,lon:x.lon,name:"",tel:"",notiz:"",erledigt:false});speichern();aktualisiere(t)}})},"+ Adresse"),
@@ -234,24 +282,43 @@ function tourSeite(t){
     h("div",{class:"unten",id:"unten"})]}
 // Kommen Stopps dazu oder fallen weg, zeigt die Karte wieder alle; beim Abhaken oder Verschieben bleibt der Ausschnitt
 let gezeigt=-1;
-function aktualisiere(t,ohneKarte){if(seite.art==="fahrt"){zeige();return}listeZeichnen(t);untenZeichnen(t);infoZeichnen(t);
+function aktualisiere(t,ohneKarte){if(seite.art==="fahrt"){zeige();return}tagZeichnen(t);listeZeichnen(t);untenZeichnen(t);infoZeichnen(t);
   if(!ohneKarte){const n=punkte(t).length;karteZeichnen(n!==gezeigt);gezeigt=n;streckeHolen()}}
-function infoZeichnen(t){const i=$("#info");if(!i)return;const offen=t.stopps.filter(s=>!s.erledigt).length,fehlt=t.stopps.filter(s=>s.lat==null).length;
-  i.replaceChildren(...[h("span",{},`${t.stopps.length} Stopps · ${offen} offen`),fehlt?h("span",{style:"color:var(--rot)"},`${fehlt} nicht gefunden`):null,
-    strecke&&strecke.key===streckeKey?h("span",{},`ca. ${kmT(strecke.km)} km · ${zeitT(strecke.min)}`):h("span",{},t.stopps.length?"Strecke wird berechnet …":"")].filter(Boolean))}
-function untenZeichnen(t){const u=$("#unten");if(!u)return;const n=naechster(t),idx=n?t.stopps.indexOf(n)+1:0;
-  if(n)u.replaceChildren(h("div",{class:"ziel"},`Nächster Stopp ${idx}: ${n.name?n.name+", ":""}${n.text}`),
-    h("button",{class:"start",onclick:()=>{geh({art:"fahrt",id:t.id});navigiere(n)}},t.stopps.some(s=>s.erledigt)?`▶ Fahrt fortsetzen (Stopp ${idx})`:"▶ Fahrt starten"));
-  else if(t.stopps.length&&t.zurueck!==false&&D.einst.start)u.replaceChildren(h("div",{class:"ziel"},"Alle Stopps erledigt."),h("button",{class:"haupt",onclick:()=>navigiere(D.einst.start)},"Zurück zum Start navigieren"));
-  else u.replaceChildren(h("div",{class:"ziel"},t.stopps.length?"Alle Stopps erledigt.":"Noch keine Stopps. Oben „+ Adresse“ oder „Liste einfügen“."))}
-function listeZeichnen(t){const l=$("#liste");if(!l)return;const n=naechster(t);
+// Tagesprüfung oben in der Tour: wer ist heute (oder am gewählten Tag) dran, wer nicht und warum
+function tagZeichnen(t){const el=$("#tag");if(!el)return;const tag=tagIso(),h0=heuteIso(),morgen=(d=>(d.setDate(d.getDate()+1),iso(d)))(new Date());
+  const H=heuteListe(t,tag),url=t.stopps.filter(s=>grund(s,tag).startsWith("Urlaub")).length,frei=t.stopps.length-H.length-url;
+  const knopf=(txt,an,fn)=>h("button",{class:an?"an":"",onclick:fn},txt);
+  const setze=tg=>{ansichtTag=tg===h0?null:tg;karteZeichnen(true);aktualisiere(t)};
+  const wahl=async()=>{const f=h("input",{type:"date",value:tag});const w=await dialog("Tag ansehen",h("label",{class:"feld"},"Datum",f),[{text:"Abbrechen",wert:null},{text:"Ansehen",klasse:"haupt",wert:"ok"}]);if(w==="ok"&&f.value)setze(f.value)};
+  const teile=[url?`${url} im Urlaub`:"",frei?`${frei} ohne Liefertag`:""].filter(Boolean);
+  el.replaceChildren(h("div",{class:"tagleiste"},knopf("Heute",!ansichtTag,()=>setze(h0)),knopf("Morgen",tag===morgen,()=>setze(morgen)),knopf(ansichtTag&&tag!==morgen?tagName(tag):"Datum …",ansichtTag&&tag!==morgen,wahl)),
+    t.stopps.length?h("div",{class:"tagtext"+(ansichtTag?" vorschau":"")},h("b",{},`${ansichtTag?"Vorschau ":"Heute, "}${tagName(tag)}: `),`${H.length} von ${t.stopps.length} Kunden`,teile.length?` · ${teile.join(" · ")}`:""):null)}
+function infoZeichnen(t){const i=$("#info");if(!i)return;const H=heuteListe(t),offen=H.filter(s=>!fertig(s)).length,fehlt=H.filter(s=>s.lat==null).length;
+  i.replaceChildren(...[h("span",{},`${H.length} Stopps · ${offen} offen`),fehlt?h("span",{style:"color:var(--rot)"},`${fehlt} nicht gefunden`):null,
+    strecke&&strecke.key===streckeKey?h("span",{},`ca. ${kmT(strecke.km)} km · ${zeitT(strecke.min)}`):h("span",{},H.length?"Strecke wird berechnet …":"")].filter(Boolean))}
+function untenZeichnen(t){const u=$("#unten");if(!u)return;const n=naechster(t),idx=n?t.stopps.indexOf(n)+1:0,H=heuteListe(t);
+  if(ansichtTag)u.replaceChildren(h("div",{class:"ziel"},`Vorschau für ${tagName(ansichtTag)}. Gefahren wird immer die Tour von heute.`),h("button",{class:"haupt",onclick:()=>{ansichtTag=null;karteZeichnen(true);aktualisiere(t)}},"Zurück zu heute"));
+  else if(n)u.replaceChildren(h("div",{class:"ziel"},`Nächster Stopp ${idx}: ${n.name?n.name+", ":""}${n.text}`),
+    h("button",{class:"start",onclick:()=>{geh({art:"fahrt",id:t.id});navigiere(n)}},H.some(s=>s.erledigt)?`▶ Fahrt fortsetzen (Stopp ${idx})`:"▶ Fahrt starten"));
+  else if(H.length&&t.zurueck!==false&&D.einst.start)u.replaceChildren(h("div",{class:"ziel"},"Alle Stopps erledigt."),h("button",{class:"haupt",onclick:()=>navigiere(D.einst.start)},"Zurück zum Start navigieren"));
+  else u.replaceChildren(h("div",{class:"ziel"},H.length?"Alle Stopps erledigt.":t.stopps.length?"Heute ist kein Kunde dran.":"Noch keine Stopps. Oben „+ Adresse“ oder „Liste einfügen“."))}
+// Kleine Marke im Stopp: Liefertage (wenn nicht jeden Tag) und der nächste Urlaub
+function marken(s){const tag=tagIso(),u=(s.urlaub||[]).find(x=>x.bis>=tag);
+  return[s.tage?h("span",{class:"marke"},tageText(s.tage)):null,u?h("span",{class:"marke urlaub",style:"margin-left:4px"},u.von<=tag?`🏖 Urlaub bis ${dT(u.bis)}`:`🏖 ab ${dT(u.von)}`):null]}
+function listeZeichnen(t){const l=$("#liste");if(!l)return;const n=naechster(t),tag=tagIso(),weg=[];
   l.replaceChildren(...t.stopps.map((s,i)=>{
+    const g=grund(s,tag);if(g){weg.push([s,i,g]);return null}
     const griff=h("div",{class:"griff","aria-label":"Ziehen zum Verschieben"},"⋮⋮");
-    const zeile=h("div",{class:"stopp"+(s.erledigt?" fertig":"")+(s===n?" naechster":"")+(s.lat==null?" fehlt":""),"data-id":s.id},griff,h("div",{class:"nr"},s.erledigt?"✓":i+1),
+    const zeile=h("div",{class:"stopp"+(fertig(s)?" fertig":"")+(s===n?" naechster":"")+(s.lat==null?" fehlt":""),"data-id":s.id},griff,h("div",{class:"nr"},fertig(s)?"✓":i+1),
       h("div",{class:"st",onclick:()=>stoppDialog(t,s)},s.name?h("b",{},s.name):null,h("div",{class:"a"},s.text),s.lat==null?h("div",{class:"klein",style:"color:var(--rot)"},"nicht gefunden: antippen und korrigieren"):null,
-        s.notiz?h("div",{class:"klein"},s.notiz):null,strecke&&strecke.key===streckeKey&&strecke.zu[s.id]?h("div",{class:"klein"},`+${kmT(strecke.zu[s.id].km)} km · ${zeitT(strecke.zu[s.id].min)}`):null),
-      h("button",{class:"haken","aria-label":s.erledigt?"Wieder öffnen":"Erledigt",onclick:()=>{s.erledigt=!s.erledigt;speichern();aktualisiere(t)}},"✓"));
-    ziehen(t,griff,zeile,l);return zeile}))}
+        s.notiz?h("div",{class:"klein"},s.notiz):null,marken(s),strecke&&strecke.key===streckeKey&&strecke.zu[s.id]?h("div",{class:"klein"},`+${kmT(strecke.zu[s.id].km)} km · ${zeitT(strecke.zu[s.id].min)}`):null),
+      ansichtTag?null:h("button",{class:"haken","aria-label":s.erledigt?"Wieder öffnen":"Erledigt",onclick:()=>{abhaken(s,!s.erledigt);speichern();aktualisiere(t)}},"✓"));
+    ziehen(t,griff,zeile,l);return zeile}).filter(Boolean));
+  // Wer an diesem Tag nicht dran ist: grau darunter, mit Grund; antippen öffnet den Stopp (z. B. Urlaub löschen)
+  const alt=$("#nicht");if(alt)alt.remove();
+  if(weg.length)l.after(h("div",{id:"nicht"},h("div",{class:"nicht-kopf"},`${ansichtTag?"An diesem Tag":"Heute"} nicht (${weg.length})`),
+    h("div",{class:"liste"},...weg.map(([s,i,g])=>h("div",{class:"stopp nicht",onclick:()=>stoppDialog(t,s)},h("div",{class:"nr"},i+1),
+      h("div",{class:"st"},s.name?h("b",{},s.name):null,h("div",{class:"a"},s.text),h("div",{class:"klein",style:g.startsWith("Urlaub")?"color:var(--gelb)":""},(g.startsWith("Urlaub")?"🏖 ":"")+g)))))))}
 // Reihenfolge mit dem Finger: am Griff ziehen, die Zeile wandert mit, beim Loslassen wird die neue Reihenfolge gespeichert
 function ziehen(t,griff,zeile,l){
   griff.addEventListener("pointerdown",e=>{e.preventDefault();griff.setPointerCapture(e.pointerId);zeile.classList.add("zieht");
@@ -259,7 +326,9 @@ function ziehen(t,griff,zeile,l){
       let vor=null;for(const x of l.children){if(x===zeile)continue;const r=x.getBoundingClientRect();if(y<r.top+r.height/2){vor=x;break}}
       if(vor!==zeile.nextSibling&&vor!==zeile)l.insertBefore(zeile,vor)};
     const ende=()=>{griff.removeEventListener("pointermove",move);zeile.classList.remove("zieht");
-      const ids=[...l.children].map(x=>x.dataset.id),vorher=t.stopps.map(s=>s.id).join();t.stopps.sort((a,b)=>ids.indexOf(a.id)-ids.indexOf(b.id));
+      // Nur die sichtbaren Stopps tauschen ihre Plätze; wer heute nicht dran ist, behält seinen Platz in der Reihenfolge
+      const ids=[...l.children].map(x=>x.dataset.id),vorher=t.stopps.map(s=>s.id).join(),neu=ids.map(id=>t.stopps.find(s=>s.id===id));let k=0;
+      t.stopps=t.stopps.map(s=>ids.includes(s.id)?neu[k++]:s);
       if(t.stopps.map(s=>s.id).join()!==vorher){speichern();aktualisiere(t)}else listeZeichnen(t)};
     griff.addEventListener("pointermove",move);griff.addEventListener("pointerup",ende,{once:true});griff.addEventListener("pointercancel",ende,{once:true})})}
 async function stoppDialog(t,s){
@@ -267,14 +336,37 @@ async function stoppDialog(t,s){
   const name=h("input",{value:s.name||"",placeholder:"Name (freiwillig)"}),tel=h("input",{value:s.tel||"",placeholder:"Telefon (freiwillig)",type:"tel"}),notiz=h("textarea",{rows:2,placeholder:"Notiz, z. B. Hinterhof, 2. Etage",value:s.notiz||""});
   const knopf=(text,fn,kl="")=>h("button",{class:kl,onclick:e=>{e.target.closest(".dlg-bg").remove();uebernehmen();fn()}},text);
   const uebernehmen=()=>{s.name=name.value.trim();s.tel=tel.value.trim();s.notiz=notiz.value.trim();speichern();aktualisiere(t)};
+  const g=grund(s,tagIso());
   const w=await dialog(`Stopp ${i+1}`,h("div",{},h("p",{style:"margin:0 0 10px"},s.text),
+      g?h("div",{class:"hinweis"},`${ansichtTag?tagName(ansichtTag):"Heute"} nicht dran: ${g}`):null,
       h("label",{class:"feld"},"Name",name),h("label",{class:"feld"},"Telefon",tel),h("label",{class:"feld"},"Notiz",notiz),
+      h("div",{class:"feld"},"Liefertage",tageWahl(s)),
+      h("div",{class:"feld"},"Urlaub",urlaubWahl(s)),
       h("div",{class:"reihe"},knopf("Navigieren",()=>navigiere(s),"haupt"),s.tel?knopf("Anrufen",()=>{location.href="tel:"+s.tel.replace(/[^\d+]/g,"")}):null),
       h("div",{class:"reihe"},knopf("▲ Nach oben",()=>{if(i>0){t.stopps.splice(i,1);t.stopps.splice(i-1,0,s);speichern();aktualisiere(t)}}),knopf("▼ Nach unten",()=>{if(i<t.stopps.length-1){t.stopps.splice(i,1);t.stopps.splice(i+1,0,s);speichern();aktualisiere(t)}})),
       h("div",{class:"reihe"},knopf("Adresse ändern",()=>adresseSuchen("Adresse ändern",{beiWahl:x=>{Object.assign(s,{text:x.text,lat:x.lat,lon:x.lon});speichern();aktualisiere(t)}})),
         knopf("Stopp löschen",async()=>{if(await frage("Stopp löschen",`${s.text} aus der Tour löschen?`,"Löschen","rot")){t.stopps=t.stopps.filter(x=>x!==s);speichern();aktualisiere(t)}},"rot"))),
     [{text:"Fertig",klasse:"haupt",wert:"ok"}]);
   uebernehmen()}
+// Liefertage im Stopp: 7 Tasten zum An- und Ausschalten, dazu Schnelltasten. Gilt sofort.
+function tageWahl(s){const box=h("div",{});
+  const setze=v=>{if(v&&v.length===7)v=null;if(v)s.tage=[...v].sort();else delete s.tage;speichern();mal()};
+  const mal=()=>{const an=s.tage||[0,1,2,3,4,5,6];
+    box.replaceChildren(h("div",{class:"tage"},...ORDNUNG.map(d=>h("button",{class:an.includes(d)?"an":"",onclick:()=>{const n=an.includes(d)?an.filter(x=>x!==d):[...an,d];if(!n.length){toast("Mindestens ein Liefertag. Für freie Tage „Urlaub“ nehmen.");return}setze(n)}},TAGE[d]))),
+      h("div",{class:"tage schnell"},...[["Mo–Sa",[1,2,3,4,5,6]],["Di–Sa",[2,3,4,5,6]],["Mo–Fr",[1,2,3,4,5]],["Jeden Tag",null]].map(([txt,v])=>h("button",{onclick:()=>setze(v)},txt))))};
+  mal();return box}
+// Urlaub im Stopp: von–bis eintragen, mehrere möglich, jeder einzeln löschbar. Vorbei gegangene verschwinden von selbst.
+function urlaubWahl(s){const box=h("div",{});
+  const mal=()=>box.replaceChildren(...(s.urlaub||[]).map(u=>h("div",{class:"url"},h("span",{},`🏖 ${dT(u.von)} bis ${dT(u.bis)}`),
+      h("button",{onclick:()=>{s.urlaub=s.urlaub.filter(x=>x!==u);if(!s.urlaub.length)delete s.urlaub;speichern();mal()}},"Löschen"))),
+    h("button",{style:"width:100%;background:var(--gelbbg);border-color:#f0cf98;color:var(--gelb);font-weight:600",onclick:neu},"🏖 Urlaub eintragen"));
+  async function neu(){const von=h("input",{type:"date",value:tagIso()}),bis=h("input",{type:"date",value:tagIso()});
+    von.addEventListener("change",()=>{if(bis.value<von.value)bis.value=von.value});
+    const w=await dialog(`Urlaub${s.name?": "+s.name:""}`,h("div",{},h("label",{class:"feld"},"von",von),h("label",{class:"feld"},"bis (letzter Urlaubstag)",bis),
+        h("p",{class:"klein",style:"margin:0"},"In dieser Zeit fällt der Kunde aus der Tour. Danach ist er von selbst wieder dabei.")),
+      [{text:"Abbrechen",wert:null},{text:"Speichern",klasse:"haupt",wert:"ok",pruefe:()=>{if(!von.value||!bis.value||bis.value<von.value){toast("Bitte beide Tage wählen, „bis“ nicht vor „von“.");return false}return true}}]);
+    if(w!=="ok")return;(s.urlaub=s.urlaub||[]).push({von:von.value,bis:bis.value});s.urlaub.sort((a,b)=>a.von<b.von?-1:1);speichern();mal()}
+  mal();return box}
 async function listeEinfuegen(t){
   const f=h("textarea",{rows:8,placeholder:"Eine Adresse pro Zeile, z. B.\nHauptstraße 5, 03046 Cottbus\nMüller, Bahnhofstr. 12, Cottbus"});
   const w=await dialog("Liste einfügen",h("div",{},h("p",{class:"klein",style:"margin-top:0"},"Eine Adresse pro Zeile. Steht vorne ein Name mit Komma, wird er als Name übernommen. Die Adressen kommen in dieser Reihenfolge ans Ende der Tour."),f),
@@ -288,7 +380,7 @@ async function einlesen(t,eintraege){
     try{r=await finde(e.q,!!e.mitName)}catch(x){}
     if(!imSpeicher)await new Promise(ok=>setTimeout(ok,350)); // die freie Adresssuche nicht überlasten
     n++;if(!r)fehlt++;
-    t.stopps.push({id:neuId(),text:r?r.text:e.q,lat:r?r.lat:null,lon:r?r.lon:null,name:e.name||(r&&r.name)||"",tel:e.tel||"",notiz:e.notiz||"",erledigt:false});
+    t.stopps.push({id:neuId(),text:r?r.text:e.q,lat:r?r.lat:null,lon:r?r.lon:null,name:e.name||(r&&r.name)||"",tel:e.tel||"",notiz:e.notiz||"",erledigt:false,...(e.tage?{tage:e.tage}:{})});
     speichern();if(seite.id===t.id)aktualisiere(t,true);toast(`Adressen werden gesucht: ${n} von ${eintraege.length}`)}
   if(seite.id===t.id)aktualisiere(t);toast(fehlt?`${eintraege.length-fehlt} gefunden, ${fehlt} nicht gefunden (rot, bitte antippen und korrigieren).`:`Alle ${eintraege.length} Adressen gefunden.`)}
 /* Excel (.xlsx, .xls, .csv): SheetJS wird erst beim ersten Gebrauch geladen. Spalten werden an der Kopfzeile erkannt,
@@ -298,11 +390,11 @@ function excelZeilen(rows){rows=rows.filter(r=>r.some(c=>String(c).trim()));if(!
   // Überschriften enthalten keine Ziffern; so wird „Waisenstraße 22“ in der ersten Zeile nicht für eine Kopfzeile gehalten
   const kopf=rows[0].map(c=>String(c).toLowerCase().trim()),such=re=>kopf.findIndex(c=>re.test(c)&&!/\d/.test(c));
   const sp={name:such(/^(name|kunde|empfänger|empfaenger|firma)/),str:such(/stra(ss|ß)e|^adresse|anschrift/),nr:such(/^hausn|^hnr|^nr\.?$/),plz:such(/^plz|postleitzahl/),
-    ort:such(/^(ort|stadt|wohnort)/),tel:such(/^tel|telefon|handy|mobil/),notiz:such(/notiz|bemerk|hinweis|^info/)};
+    ort:such(/^(ort|stadt|wohnort)/),tel:such(/^tel|telefon|handy|mobil/),notiz:such(/notiz|bemerk|hinweis|^info/),tage:such(/liefertag|^tage|wochentag|^liefern/)};
   if(sp.str<0&&sp.plz<0&&sp.ort<0)return rows.map(r=>({q:r.map(c=>String(c).trim()).filter(Boolean).join(", "),mitName:true}));
   const g=(r,i)=>i>=0?String(r[i]).trim():"";
   return rows.slice(1).map(r=>({q:[[g(r,sp.str),sp.str>=0?g(r,sp.nr):""].filter(Boolean).join(" "),[g(r,sp.plz),g(r,sp.ort)].filter(Boolean).join(" ")].filter(Boolean).join(", "),
-    name:g(r,sp.name),tel:g(r,sp.tel),notiz:g(r,sp.notiz)})).filter(e=>e.q)}
+    name:g(r,sp.name),tel:g(r,sp.tel),notiz:g(r,sp.notiz),tage:tageLesen(g(r,sp.tage))})).filter(e=>e.q)}
 function excelEinlesen(t){const inp=h("input",{type:"file",accept:".xlsx,.xls,.csv,.ods"});
   inp.addEventListener("change",async()=>{const f=inp.files[0];if(!f)return;
     try{await excelLaden()}catch(e){toast("Der Excel-Leser lädt nicht. Ist das Handy online?");return}
@@ -424,21 +516,24 @@ let wachSperre=null,letzterErledigt=null;
 async function wachHalten(an){ // Bildschirm im Fahrmodus nicht ausgehen lassen (wo der Browser es kann)
   try{if(an&&"wakeLock" in navigator&&!wachSperre){wachSperre=await navigator.wakeLock.request("screen");wachSperre.addEventListener("release",()=>{wachSperre=null})}
     else if(!an&&wachSperre){await wachSperre.release();wachSperre=null}}catch(e){}}
-document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&seite.art==="fahrt"){wachHalten(true);zeige()}});
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState!=="visible")return;
+  if(tagesWechsel()&&seite.art!=="fahrt")zeige(); // die App lag über Nacht offen: neuer Tag, Haken frisch
+  if(seite.art==="fahrt"){wachHalten(true);zeige()}});
 function fahrtSeite(t){
-  const n=naechster(t),idx=n?t.stopps.indexOf(n)+1:0,fertig=t.stopps.filter(s=>s.erledigt).length;
-  const nachN=n?t.stopps.slice(idx).find(s=>!s.erledigt):null,nachIdx=nachN?t.stopps.indexOf(nachN)+1:0;
+  // Fahrmodus gilt immer für heute: Kunden im Urlaub oder ohne Liefertag heute werden übersprungen
+  const H=heuteListe(t),n=naechster(t),idx=n?t.stopps.indexOf(n)+1:0,fertig=H.filter(s=>s.erledigt).length;
+  const nachN=n?H.slice(H.indexOf(n)+1).find(s=>!s.erledigt):null,nachIdx=nachN?t.stopps.indexOf(nachN)+1:0;
   const zurStart=t.zurueck!==false&&D.einst.start;
-  const kopf=h("div",{class:"fahrt-kopf"},h("button",{onclick:()=>geh({art:"tour",id:t.id})},"← Liste"),h("b",{},n?`Stopp ${idx} von ${t.stopps.length}`:t.name),h("span",{class:"klein"},`${fertig} ✓`));
-  if(!n)return h("div",{class:"fahrt"},kopf,h("div",{class:"fahrt-mitte"},h("div",{class:"fahrt-karte",style:"border-color:var(--ok);text-align:center"},h("div",{class:"fn"},"Alle Stopps erledigt"),h("div",{class:"klein",style:"margin-top:6px"},`${t.stopps.length} Stopps in „${t.name}“`))),
+  const kopf=h("div",{class:"fahrt-kopf"},h("button",{onclick:()=>geh({art:"tour",id:t.id})},"← Liste"),h("b",{},n?`Stopp ${idx} · noch ${H.length-fertig}`:t.name),h("span",{class:"klein"},`${fertig} ✓`));
+  if(!n)return h("div",{class:"fahrt"},kopf,h("div",{class:"fahrt-mitte"},h("div",{class:"fahrt-karte",style:"border-color:var(--ok);text-align:center"},h("div",{class:"fn"},H.length?"Alle Stopps erledigt":"Heute ist kein Kunde dran"),h("div",{class:"klein",style:"margin-top:6px"},`${H.length} Stopps heute in „${t.name}“`))),
     h("div",{class:"fahrt-unten"},letzterErledigt?h("button",{onclick:rueckgaengig},"↶ Letzten Haken zurücknehmen"):null,
       zurStart?h("button",{class:"weiter",onclick:()=>navigiere(D.einst.start)},"Zurück zum Start navigieren"):null,h("button",{class:"nav",onclick:()=>geh({art:"tour",id:t.id})},"Zur Tour-Liste")));
   const zu=strecke&&strecke.key===streckeKey&&strecke.zu[n.id];
   const weiterText=nachN?`✓ Erledigt – weiter zu ${nachIdx}`:zurStart?"✓ Erledigt – zurück zum Start":"✓ Erledigt – Tour fertig";
-  function weiter(){n.erledigt=true;letzterErledigt=n.id;speichern();if(navigator.vibrate)navigator.vibrate(40);zeige();
+  function weiter(){abhaken(n,true);letzterErledigt=n.id;speichern();if(navigator.vibrate)navigator.vibrate(40);zeige();
     if(nachN)navigiere(nachN);else if(zurStart)navigiere(D.einst.start)}
   function spaeter(){t.stopps.splice(t.stopps.indexOf(n),1);t.stopps.push(n);speichern();toast(`Stopp ans Ende verschoben.${nachN?" Weiter mit "+(nachN.name||nachN.text):""}`);zeige()}
-  function rueckgaengig(){const s=t.stopps.find(x=>x.id===letzterErledigt);if(s){s.erledigt=false;letzterErledigt=null;speichern();zeige();toast("Haken zurückgenommen.")}}
+  function rueckgaengig(){const s=t.stopps.find(x=>x.id===letzterErledigt);if(s){abhaken(s,false);letzterErledigt=null;speichern();zeige();toast("Haken zurückgenommen.")}}
   window.__rueckgaengig=rueckgaengig;
   return h("div",{class:"fahrt"},kopf,
     h("div",{class:"fahrt-mitte"},
@@ -453,7 +548,7 @@ function fahrtSeite(t){
       h("button",{class:"weiter",onclick:weiter},weiterText)))}
 
 /* ---------- Karte und Strecke ---------- */
-function punkte(t){const p=[];if(D.einst.start)p.push({...D.einst.start,id:"start"});for(const s of t.stopps)if(s.lat!=null)p.push(s);if(t.zurueck!==false&&D.einst.start&&t.stopps.length)p.push({...D.einst.start,id:"ende"});return p}
+function punkte(t){const p=[],H=heuteListe(t);if(D.einst.start)p.push({...D.einst.start,id:"start"});for(const s of H)if(s.lat!=null)p.push(s);if(t.zurueck!==false&&D.einst.start&&H.length)p.push({...D.einst.start,id:"ende"});return p}
 function karteZeichnen(einpassen){const t=tour(seite.id),el=$("#karte");if(!t||!el||typeof L==="undefined")return;
   if(!karte){karte=L.map(el,{zoomControl:true});let fehler=0;
     const osm=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"});
@@ -462,7 +557,7 @@ function karteZeichnen(einpassen){const t=tour(seite.id),el=$("#karte");if(!t||!
   schicht.clearLayers();const n=naechster(t);
   const pin=(lat,lon,txt,kl,fn)=>{const m=L.marker([lat,lon],{icon:L.divIcon({className:"pin "+kl,html:txt,iconSize:[28,28],iconAnchor:[14,14]})}).addTo(schicht);if(fn)m.on("click",fn)};
   if(D.einst.start)pin(D.einst.start.lat,D.einst.start.lon,"S","start");
-  t.stopps.forEach((s,i)=>{if(s.lat!=null)pin(s.lat,s.lon,String(i+1),s.erledigt?"fertig":s===n?"naechster":"",()=>stoppDialog(t,s))});
+  const tag=tagIso();t.stopps.forEach((s,i)=>{if(s.lat!=null&&!grund(s,tag))pin(s.lat,s.lon,String(i+1),fertig(s)?"fertig":s===n?"naechster":"",()=>stoppDialog(t,s))});
   if(strecke&&strecke.key===streckeKey&&strecke.geo.length)L.polyline(strecke.geo,{color:"#0f6e74",weight:5,opacity:.75}).addTo(schicht);
   if(einpassen){karte.invalidateSize();const p=punkte(t);if(p.length>1)karte.fitBounds(p.map(x=>[x.lat,x.lon]),{padding:[30,30]});else if(p.length===1)karte.setView([p[0].lat,p[0].lon],14)}}
 // Strecke in der festgelegten Reihenfolge (OSRM, in Stücken von höchstens 80 Punkten, damit es keine Obergrenze gibt)
@@ -479,7 +574,8 @@ function streckeHolen(){clearTimeout(streckeT);streckeT=setTimeout(async()=>{con
     if(seite.art==="fahrt"&&seite.id===t.id)zeige()}
   catch(e){console.warn(e);const i=$("#info");if(i&&streckeKey===key)i.lastChild&&(i.lastChild.textContent="Strecke gerade nicht verfügbar (Internet?)")}},700)}
 
-window.__liefertour={get D(){return D},packe,entpacke,tourDaten}; // zum Prüfen
+window.__liefertour={get D(){return D},packe,entpacke,tourDaten,tourUebernehmen,tageLesen,tageText,grund,tagesWechsel}; // zum Prüfen
+tagesWechsel();
 if(D.ansicht&&(D.ansicht.art==="fahrt"||D.ansicht.art==="tour")&&tour(D.ansicht.id))seite={art:D.ansicht.art,id:D.ansicht.id};
 if(seite.art==="fahrt")wachHalten(true);
 zeige();linkPruefen();
