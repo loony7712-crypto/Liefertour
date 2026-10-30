@@ -103,9 +103,10 @@ async function finde(zeile,mitName=true){const k=(mitName?"":"a:")+zeile.trim().
   let r=(await suche(q,1))[0];
   if(!r&&mitName&&!name&&teile.length>=2&&!/\d/.test(teile[0])){name=teile[0];r=(await suche(teile.slice(1).join(", "),1))[0]}
   if(!r)return null;
-  // Kennt die Kartensuche die Hausnummer nicht (nur die Straße gefunden), bleibt der eingegebene Text stehen
+  // Angezeigt wird die Adresse so, wie sie in der Liste stand (mit „38 C“ usw.); die Kartensuche liefert nur den Punkt auf der Karte.
+  // Nur wenn die Zeile keine Hausnummer hatte, steht der Text der Kartensuche da.
   const eigen=name?zeile.slice(zeile.indexOf(",")+1).trim():zeile.trim();
-  const e={lat:r.lat,lon:r.lon,text:!r.hn&&/\d/.test(eigen)?eigen:r.text,name};D.cache[k]=e;speichern();return e}
+  const e={lat:r.lat,lon:r.lon,text:/\d/.test(eigen)?eigen:r.text,name};D.cache[k]=e;speichern();return e}
 
 /* ---------- Dialoge (von unten, gut mit dem Daumen) ---------- */
 function dialog(titel,inhalt,knoepfe){return new Promise(ok=>{
@@ -334,10 +335,12 @@ async function bildVorbereiten(datei){const bmp=await createImageBitmap(datei),f
 function saeubern(s){s=s.replace(/[‘’‚„“”'`´;:|©®°•…_~»«\[\]{}()]/g," ").replace(/\s[.,\-]+(?=\s|$)/g," ").replace(/\s+/g," ").trim().replace(/^[^0-9A-Za-zÄÖÜäöüß]+/,"").replace(/[.,\-]+$/,"").trim();
   return s.replace(/^([0-9OolI]{5})(\s)/,(m,q,l)=>/\d{3}/.test(q)?q.replace(/[Oo]/g,"0").replace(/[lI]/g,"1")+l:m)} // O→0, l/I→1 in der PLZ
 function adressenAusText(text){
-  const z=text.split(/\r?\n/).map(saeubern).filter(Boolean).map(s=>{
+  // Hinweis in Klammern am Zeilenende merken („Lindenweg 5 (im NORMA)“, „Müller (Extra Stellen)“), er kommt in Notiz bzw. Name
+  const hinweis=[];
+  const z=text.split(/\r?\n/).map(roh=>{const m=roh.match(/\s*\(([^()]{2,40})\)\s*$/);return{s:saeubern(m?roh.slice(0,m.index):roh),h:m?m[1].trim():""}}).filter(x=>x.s).map(({s,h})=>{
     if(/^\d{5}\s/.test(s)){while(s.split(" ").length>2&&/\s\S{1,2}$/.test(s))s=s.replace(/\s\S{1,2}$/,"")} // „03222 Lübbenau N u“
-    else s=s.replace(/(\s\d{1,4}\s?[a-h]?)\s+\S{1,3}$/,"$1"); // „Topfmarkt 10 WO“
-    return s});
+    else s=s.replace(/(\s\d{1,4}(?:\s?[a-zA-Z])?)\s+(?![a-zA-Z]$)\S{1,3}$/,"$1"); // „Topfmarkt 10 WO“, aber „Straße 38 C“ bleibt
+    hinweis.push(h);return s});
   const istOrt=s=>/^\d{5}\s+[A-Za-zÄÖÜäöüß]/.test(s);
   const istStr=s=>!istOrt(s)&&/[A-Za-zÄÖÜäöüß]{3}.*\s\d{1,4}\s?[a-zA-Z]?(\s?[-\/]\s?\d{1,4}[a-zA-Z]?)?$/.test(s);
   const out=[],benutzt=new Set();
@@ -345,7 +348,8 @@ function adressenAusText(text){
     const vor=i>=2?z[i-2]:"";let name="",kd="";
     // Namenszeile darüber: nicht die PLZ-Zeile des vorigen Blocks; „19310 Netto Supermarkt 6128“ endet zwar auf Ziffern, beginnt aber mit der Kundennummer
     if(vor&&!istOrt(vor)&&(!istStr(vor)||/^\d/.test(vor))){const m=vor.match(/^(?:\d{1,4}\s+)?(\d{4,6})\s+(.+)$/);if(m){kd=m[1];name=m[2]}else name=vor.replace(/^\d+\s+/,"")}
-    out.push({q:`${z[i-1]}, ${z[i]}`,name:name.trim(),notiz:kd?`Kd. ${kd}`:""})}
+    if(name&&hinweis[i-2])name+=` (${hinweis[i-2]})`;
+    out.push({q:`${z[i-1]}, ${z[i]}`,name:name.trim(),notiz:[kd?`Kd. ${kd}`:"",hinweis[i-1]].filter(Boolean).join(" · ")})}
   // Dazu Adressen in einer Zeile („Hauptstr. 5, 03046 Cottbus“, auch mit Name davor), wie sie in vielen PDF-Listen stehen
   z.forEach((s,i)=>{if(benutzt.has(i))return;
     const m=s.match(/^(?:(.*?),\s*)?([A-Za-zÄÖÜäöüß][^,]*?[A-Za-zäöüß.]\s\d{1,4}\s?[a-zA-Z]?)[,\s]+(\d{5}\s+[A-Za-zÄÖÜäöüß][^,]*)$/);
