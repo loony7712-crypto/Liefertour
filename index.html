@@ -224,7 +224,7 @@ function tourSeite(t){
       h("div",{class:"info",id:"info"}),
       h("div",{class:"reihe"},h("button",{class:"haupt",onclick:()=>adresseSuchen("Adresse hinzufügen",{mehrfach:true,beiWahl:x=>{t.stopps.push({id:neuId(),text:x.text,lat:x.lat,lon:x.lon,name:"",tel:"",notiz:"",erledigt:false});speichern();aktualisiere(t)}})},"+ Adresse"),
         h("button",{onclick:()=>fotoScannen(t)},"Foto scannen")),
-      h("div",{class:"reihe"},h("button",{onclick:()=>listeEinfuegen(t)},"Liste einfügen"),h("button",{onclick:()=>excelEinlesen(t)},"Excel")),
+      h("div",{class:"reihe"},h("button",{onclick:()=>pdfEinlesen(t)},"PDF"),h("button",{onclick:()=>excelEinlesen(t)},"Excel"),h("button",{onclick:()=>listeEinfuegen(t)},"Liste einfügen")),
       h("div",{class:"liste",id:"liste"}),
       h("label",{class:"karte-t",style:"display:flex;gap:10px;align-items:center;margin-top:10px"},(()=>{const c=h("input",{type:"checkbox",style:"width:24px;height:24px"});c.checked=t.zurueck!==false;c.addEventListener("change",()=>{t.zurueck=c.checked;speichern();aktualisiere(t)});return c})(),
         h("span",{},"Am Ende zurück zum Start")),
@@ -340,21 +340,25 @@ function adressenAusText(text){
     return s});
   const istOrt=s=>/^\d{5}\s+[A-Za-zÄÖÜäöüß]/.test(s);
   const istStr=s=>!istOrt(s)&&/[A-Za-zÄÖÜäöüß]{3}.*\s\d{1,4}\s?[a-zA-Z]?(\s?[-\/]\s?\d{1,4}[a-zA-Z]?)?$/.test(s);
-  const out=[];
-  for(let i=1;i<z.length;i++){if(!istOrt(z[i])||!istStr(z[i-1]))continue;
+  const out=[],benutzt=new Set();
+  for(let i=1;i<z.length;i++){if(!istOrt(z[i])||!istStr(z[i-1]))continue;benutzt.add(i).add(i-1);
     const vor=i>=2?z[i-2]:"";let name="",kd="";
     // Namenszeile darüber: nicht die PLZ-Zeile des vorigen Blocks; „19310 Netto Supermarkt 6128“ endet zwar auf Ziffern, beginnt aber mit der Kundennummer
     if(vor&&!istOrt(vor)&&(!istStr(vor)||/^\d/.test(vor))){const m=vor.match(/^(?:\d{1,4}\s+)?(\d{4,6})\s+(.+)$/);if(m){kd=m[1];name=m[2]}else name=vor.replace(/^\d+\s+/,"")}
     out.push({q:`${z[i-1]}, ${z[i]}`,name:name.trim(),notiz:kd?`Kd. ${kd}`:""})}
+  // Dazu Adressen in einer Zeile („Hauptstr. 5, 03046 Cottbus“, auch mit Name davor), wie sie in vielen PDF-Listen stehen
+  z.forEach((s,i)=>{if(benutzt.has(i))return;
+    const m=s.match(/^(?:(.*?),\s*)?([A-Za-zÄÖÜäöüß][^,]*?[A-Za-zäöüß.]\s\d{1,4}\s?[a-zA-Z]?)[,\s]+(\d{5}\s+[A-Za-zÄÖÜäöüß][^,]*)$/);
+    if(m)out.push({q:`${m[2].trim()}, ${m[3].trim()}`,name:(m[1]||"").replace(/^\d+\s+/,"").trim(),notiz:""})});
   return out}
 window.__adressenAusText=adressenAusText; // zum Prüfen
 function fotoScannen(t,liste=[]){const inp=h("input",{type:"file",accept:"image/*",capture:"environment"});
   inp.addEventListener("change",async()=>{const f=inp.files[0];if(!f)return;const neu=await fotoLesen(f);if(neu==null){if(liste.length)pruefen(t,liste);return}
     liste.push(...neu);pruefen(t,liste,neu.length)});inp.click()}
 window.__fotoLesen=f=>fotoLesen(f); // zum Prüfen
-async function fotoLesen(datei){
+async function fotoLesen(datei,titel="Foto wird gelesen"){
   const st=h("div",{style:"font-size:20px;text-align:center;padding:20px 0"},"Texterkennung wird vorbereitet …");
-  const bg=h("div",{class:"dlg-bg"},h("div",{class:"dlg"},h("div",{class:"dlg-kopf"},h("b",{},"Foto wird gelesen")),st,h("p",{class:"klein",style:"text-align:center"},"Beim ersten Mal wird die Texterkennung geladen (einige MB), danach geht es schneller.")));
+  const bg=h("div",{class:"dlg-bg"},h("div",{class:"dlg"},h("div",{class:"dlg-kopf"},h("b",{},titel)),st,h("p",{class:"klein",style:"text-align:center"},"Beim ersten Mal wird die Texterkennung geladen (einige MB), danach geht es schneller.")));
   document.body.append(bg);
   try{ocrFort=m=>{st.textContent=m.status==="recognizing text"?`Text wird gelesen … ${Math.round((m.progress||0)*100)} %`:"Texterkennung wird vorbereitet …"};
     const w=await ocrLaden(),b=await bildVorbereiten(datei);
@@ -367,6 +371,33 @@ async function fotoLesen(datei){
     return a}
   catch(e){console.warn(e);toast("Die Texterkennung lädt nicht. Ist das Handy online?");return null}
   finally{ocrFort=null;bg.remove()}}
+/* ---------- PDF einlesen (Wunsch 31.10.2026): Tourenliste als PDF ----------
+   PDF mit Text: Text direkt auslesen (pdf.js, Zeilen nach Höhe zusammengesetzt), schnell und ohne Lesefehler.
+   Eingescannte PDF (nur Bild): Seite als Bild darstellen und wie ein Foto mit der Texterkennung lesen. Danach dieselbe Prüfliste. */
+const PDFJS="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/";
+async function pdfLaden(){if(window.pdfjsLib)return;
+  await new Promise((ok,nein)=>{const s=document.createElement("script");s.src=PDFJS+"pdf.min.js";s.onload=ok;s.onerror=()=>nein(new Error("laden"));document.head.append(s)});
+  pdfjsLib.GlobalWorkerOptions.workerSrc=PDFJS+"pdf.worker.min.js"}
+async function pdfZeilen(seite){const tc=await seite.getTextContent(),zeilen=[];
+  for(const it of tc.items){if(!it.str||!it.str.trim())continue;const y=it.transform[5],x=it.transform[4];
+    let z=zeilen.find(l=>Math.abs(l.y-y)<Math.max(2,(it.height||10)*0.4));if(!z){z={y,teile:[]};zeilen.push(z)}z.teile.push({x,s:it.str,w:it.width||0})}
+  // Leerzeichen nur bei echter Lücke: manche PDFs teilen „Ehm-Welk-Str.“ in Stücke
+  return zeilen.sort((a,b)=>b.y-a.y).map(z=>{let s="",ende=null;for(const t of z.teile.sort((a,b)=>a.x-b.x)){s+=(ende!=null&&t.x-ende>1.5?" ":"")+t.s;ende=t.x+t.w}return s.replace(/\s+/g," ").trim()})}
+async function pdfLesen(datei){
+  const st=h("div",{style:"font-size:20px;text-align:center;padding:20px 0"},"PDF wird geöffnet …"),bg=h("div",{class:"dlg-bg"},h("div",{class:"dlg"},h("div",{class:"dlg-kopf"},h("b",{},"PDF wird gelesen")),st));
+  document.body.append(bg);const liste=[],bilder=[];
+  try{await pdfLaden();const pdf=await pdfjsLib.getDocument({data:await datei.arrayBuffer()}).promise;
+    for(let n=1;n<=pdf.numPages;n++){st.textContent=`Seite ${n} von ${pdf.numPages} …`;const s=await pdf.getPage(n),z=await pdfZeilen(s);
+      if(z.join("").length<20)bilder.push(s);else liste.push(...adressenAusText(z.join("\n")))}}
+  catch(e){console.warn(e);bg.remove();toast("Die PDF ließ sich nicht lesen. Ist das Handy online?");return null}
+  bg.remove();
+  for(const s of bilder){const vp=s.getViewport({scale:2.5}),c=document.createElement("canvas");c.width=vp.width;c.height=vp.height;
+    const g=c.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,c.width,c.height);await s.render({canvasContext:g,viewport:vp}).promise;
+    const neu=await fotoLesen(c,`Eingescannte Seite wird gelesen`);if(neu)liste.push(...neu)}
+  return liste}
+window.__pdfLesen=pdfLesen; // zum Prüfen
+function pdfEinlesen(t){const inp=h("input",{type:"file",accept:"application/pdf,.pdf"});
+  inp.addEventListener("change",async()=>{const f=inp.files[0];if(!f)return;const l=await pdfLesen(f);if(l)pruefen(t,l,l.length)});inp.click()}
 // Prüfliste: jede erkannte Adresse lässt sich korrigieren oder entfernen, dann „Einlesen“ oder ein weiteres Foto
 async function pruefen(t,liste,neu){
   const box=h("div");
