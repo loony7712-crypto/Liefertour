@@ -223,7 +223,8 @@ function tourSeite(t){
       h("div",{id:"karte"},typeof L==="undefined"?h("p",{class:"klein",style:"padding:20px;text-align:center"},"Die Karte braucht Internet."):null),
       h("div",{class:"info",id:"info"}),
       h("div",{class:"reihe"},h("button",{class:"haupt",onclick:()=>adresseSuchen("Adresse hinzufügen",{mehrfach:true,beiWahl:x=>{t.stopps.push({id:neuId(),text:x.text,lat:x.lat,lon:x.lon,name:"",tel:"",notiz:"",erledigt:false});speichern();aktualisiere(t)}})},"+ Adresse"),
-        h("button",{onclick:()=>listeEinfuegen(t)},"Liste einfügen"),h("button",{onclick:()=>excelEinlesen(t)},"Excel")),
+        h("button",{onclick:()=>fotoScannen(t)},"Foto scannen")),
+      h("div",{class:"reihe"},h("button",{onclick:()=>listeEinfuegen(t)},"Liste einfügen"),h("button",{onclick:()=>excelEinlesen(t)},"Excel")),
       h("div",{class:"liste",id:"liste"}),
       h("label",{class:"karte-t",style:"display:flex;gap:10px;align-items:center;margin-top:10px"},(()=>{const c=h("input",{type:"checkbox",style:"width:24px;height:24px"});c.checked=t.zurueck!==false;c.addEventListener("change",()=>{t.zurueck=c.checked;speichern();aktualisiere(t)});return c})(),
         h("span",{},"Am Ende zurück zum Start")),
@@ -310,6 +311,77 @@ function excelEinlesen(t){const inp=h("input",{type:"file",accept:".xlsx,.xls,.c
     if(await frage("Excel einlesen",`${e.length} Adressen gefunden (erste: ${e[0].q}). Ans Ende der Tour anfügen?`,"Einlesen"))einlesen(t,e)});
   inp.click()}
 window.__excelZeilen=excelZeilen; // zum Prüfen
+
+/* ---------- Foto scannen (Wunsch 31.10.2026): gedruckte Adressliste abfotografieren ----------
+   Texterkennung Tesseract.js (deutsch) direkt auf dem Handy, wird erst beim ersten Scan geladen. Das Foto wird nicht gespeichert,
+   nur die Adressen, die der Fahrer in der Prüfliste bestätigt. Erkannt wird der Aufbau der Tourliste:
+   „310  19758 Name“ / „Straße Nr“ / „PLZ Ort“ (Straße mit Hausnummer direkt über einer Zeile mit Postleitzahl). */
+const TESS="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
+let ocrWorker=null,ocrFort=null;
+async function ocrLaden(){
+  if(!window.Tesseract)await new Promise((ok,nein)=>{const s=document.createElement("script");s.src=TESS;s.onload=ok;s.onerror=()=>nein(new Error("laden"));document.head.append(s)});
+  if(!ocrWorker)ocrWorker=await Tesseract.createWorker("deu",1,{logger:m=>{if(ocrFort)ocrFort(m)}});
+  return ocrWorker}
+// Foto verkleinern und aufbereiten. Zwei Fassungen: grau mit mehr Kontrast, und schwarz-weiß mit örtlicher Schwelle
+// (gleicht Schatten und gewölbtes Papier aus; damit wurden beim Testfoto alle Adressen gelesen statt drei von sieben)
+async function bildVorbereiten(datei){const bmp=await createImageBitmap(datei),f=Math.min(1,2200/Math.max(bmp.width,bmp.height));
+  const neu=filter=>{const c=document.createElement("canvas");c.width=Math.round(bmp.width*f);c.height=Math.round(bmp.height*f);const g=c.getContext("2d");g.filter=filter;g.drawImage(bmp,0,0,c.width,c.height);return c};
+  const grau=neu("grayscale(1) contrast(1.4)"),sw=neu("grayscale(1)"),g=sw.getContext("2d"),W=sw.width,H=sw.height,d=g.getImageData(0,0,W,H),p=d.data,B=32,bx=Math.ceil(W/B),mit=[];
+  for(let y=0;y<H;y+=B)for(let x=0;x<W;x+=B){let s=0,n=0;for(let yy=y;yy<Math.min(H,y+B);yy+=4)for(let xx=x;xx<Math.min(W,x+B);xx+=4){s+=p[(yy*W+xx)*4];n++}mit.push(s/n)}
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=(y*W+x)*4,v=p[i]<mit[Math.floor(y/B)*bx+Math.floor(x/B)]-18?0:255;p[i]=p[i+1]=p[i+2]=v}
+  g.putImageData(d,0,0);return{grau,sw}}
+// Eine gelesene Zeile säubern: Anführungszeichen, Satzzeichen und kurzen Müll am Ende entfernen
+function saeubern(s){s=s.replace(/[‘’‚„“”'`´;:|©®°•…_~»«\[\]{}()]/g," ").replace(/\s[.,\-]+(?=\s|$)/g," ").replace(/\s+/g," ").trim().replace(/^[^0-9A-Za-zÄÖÜäöüß]+/,"").replace(/[.,\-]+$/,"").trim();
+  return s.replace(/^([0-9OolI]{5})(\s)/,(m,q,l)=>/\d{3}/.test(q)?q.replace(/[Oo]/g,"0").replace(/[lI]/g,"1")+l:m)} // O→0, l/I→1 in der PLZ
+function adressenAusText(text){
+  const z=text.split(/\r?\n/).map(saeubern).filter(Boolean).map(s=>{
+    if(/^\d{5}\s/.test(s)){while(s.split(" ").length>2&&/\s\S{1,2}$/.test(s))s=s.replace(/\s\S{1,2}$/,"")} // „03222 Lübbenau N u“
+    else s=s.replace(/(\s\d{1,4}\s?[a-h]?)\s+\S{1,3}$/,"$1"); // „Topfmarkt 10 WO“
+    return s});
+  const istOrt=s=>/^\d{5}\s+[A-Za-zÄÖÜäöüß]/.test(s);
+  const istStr=s=>!istOrt(s)&&/[A-Za-zÄÖÜäöüß]{3}.*\s\d{1,4}\s?[a-zA-Z]?(\s?[-\/]\s?\d{1,4}[a-zA-Z]?)?$/.test(s);
+  const out=[];
+  for(let i=1;i<z.length;i++){if(!istOrt(z[i])||!istStr(z[i-1]))continue;
+    const vor=i>=2?z[i-2]:"";let name="",kd="";
+    // Namenszeile darüber: nicht die PLZ-Zeile des vorigen Blocks; „19310 Netto Supermarkt 6128“ endet zwar auf Ziffern, beginnt aber mit der Kundennummer
+    if(vor&&!istOrt(vor)&&(!istStr(vor)||/^\d/.test(vor))){const m=vor.match(/^(?:\d{1,4}\s+)?(\d{4,6})\s+(.+)$/);if(m){kd=m[1];name=m[2]}else name=vor.replace(/^\d+\s+/,"")}
+    out.push({q:`${z[i-1]}, ${z[i]}`,name:name.trim(),notiz:kd?`Kd. ${kd}`:""})}
+  return out}
+window.__adressenAusText=adressenAusText; // zum Prüfen
+function fotoScannen(t,liste=[]){const inp=h("input",{type:"file",accept:"image/*",capture:"environment"});
+  inp.addEventListener("change",async()=>{const f=inp.files[0];if(!f)return;const neu=await fotoLesen(f);if(neu==null){if(liste.length)pruefen(t,liste);return}
+    liste.push(...neu);pruefen(t,liste,neu.length)});inp.click()}
+window.__fotoLesen=f=>fotoLesen(f); // zum Prüfen
+async function fotoLesen(datei){
+  const st=h("div",{style:"font-size:20px;text-align:center;padding:20px 0"},"Texterkennung wird vorbereitet …");
+  const bg=h("div",{class:"dlg-bg"},h("div",{class:"dlg"},h("div",{class:"dlg-kopf"},h("b",{},"Foto wird gelesen")),st,h("p",{class:"klein",style:"text-align:center"},"Beim ersten Mal wird die Texterkennung geladen (einige MB), danach geht es schneller.")));
+  document.body.append(bg);
+  try{ocrFort=m=>{st.textContent=m.status==="recognizing text"?`Text wird gelesen … ${Math.round((m.progress||0)*100)} %`:"Texterkennung wird vorbereitet …"};
+    const w=await ocrLaden(),b=await bildVorbereiten(datei);
+    await w.setParameters({tessedit_pageseg_mode:"4"});const a=adressenAusText((await w.recognize(b.sw)).data.text);
+    await w.setParameters({tessedit_pageseg_mode:"3"});const c=adressenAusText((await w.recognize(b.grau)).data.text);
+    // zusammenführen: Reihenfolge der Schwarz-weiß-Fassung, fehlende aus der grauen ergänzen; vollständigere Lesung gewinnt
+    const key=e=>e.q.toLowerCase().replace(/[^a-zäöüß0-9]/g,"").replace(/stra(ss|ß)e$/,"str").slice(0,10);
+    for(const e of c){const da=a.find(x=>key(x)===key(e)||x.q.split(",")[0].slice(0,6).toLowerCase()===e.q.split(",")[0].slice(0,6).toLowerCase());
+      if(!da)a.push(e);else{if(e.q.length>da.q.length&&/\d/.test(e.q.split(",")[0]))da.q=e.q;if(!da.name||(e.name&&/^[A-ZÄÖÜa-zäöüß -]+$/.test(e.name)&&e.name.length>=da.name.length))da.name=e.name||da.name;if(!da.notiz)da.notiz=e.notiz}}
+    return a}
+  catch(e){console.warn(e);toast("Die Texterkennung lädt nicht. Ist das Handy online?");return null}
+  finally{ocrFort=null;bg.remove()}}
+// Prüfliste: jede erkannte Adresse lässt sich korrigieren oder entfernen, dann „Einlesen“ oder ein weiteres Foto
+async function pruefen(t,liste,neu){
+  const box=h("div");
+  const zeichneP=()=>box.replaceChildren(...(liste.length?liste.map((e,i)=>{
+      const n=h("input",{value:e.name,placeholder:"Name (freiwillig)",style:"margin-bottom:6px;font-weight:600"}),a=h("input",{value:e.q,placeholder:"Straße Nr, PLZ Ort"});
+      n.addEventListener("input",()=>e.name=n.value);a.addEventListener("input",()=>e.q=a.value);
+      return h("div",{class:"karte-t",style:"padding:8px 10px;margin-bottom:6px"},h("div",{style:"display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"},
+          h("b",{},`${i+1}.${e.notiz?" · "+e.notiz:""}`),h("button",{class:"rot",style:"min-height:38px;padding:4px 12px",onclick:()=>{liste.splice(i,1);zeichneP()}},"✕ Entfernen")),n,a)}):
+    [h("p",{},"Auf dem Foto wurde keine Adresse erkannt. Bitte das Papier gerade, hell und scharf fotografieren.")]));
+  zeichneP();
+  const weiter=h("button",{style:"width:100%;margin-top:6px",onclick:()=>{weiter.closest(".dlg-bg").remove();fotoScannen(t,liste)}},"+ Weiteres Foto");
+  const w=await dialog(neu!=null?`${neu} Adressen erkannt`:"Adressen prüfen",h("div",{},h("p",{class:"klein",style:"margin-top:0"},"Bitte kurz prüfen und Lesefehler korrigieren. Erst mit „Einlesen“ kommen die Adressen in die Tour, das Foto wird nicht gespeichert."),box,weiter),
+    [{text:"Abbrechen",wert:null},{text:`Einlesen (${liste.length})`,klasse:"haupt",wert:"ok"}]);
+  if(w!=="ok")return;const e=liste.filter(x=>x.q.trim());if(!e.length)return;
+  einlesen(t,e.map(x=>({q:x.q.trim(),mitName:false,name:x.name.trim(),notiz:x.notiz})))}
 
 /* ---------- Fahrmodus (Wunsch 31.10.2026): während der Fahrt nur große Knöpfe.
    Ein Tipp auf „Erledigt – weiter“ hakt den Stopp ab und startet sofort die Navigation zum nächsten. ---------- */
