@@ -30,7 +30,9 @@ main{padding:12px;padding-bottom:110px;max-width:760px;margin:0 auto}
 .stopp{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:8px}
 .stopp.fertig{opacity:.55}.stopp.naechster{border:2px solid var(--acc)}.stopp.zieht{box-shadow:0 6px 18px rgba(0,0,0,.2);opacity:.95}
 .griff{touch-action:none;cursor:grab;font-size:22px;color:var(--mut);padding:8px 4px;user-select:none}
-.nr{width:34px;height:34px;border-radius:50%;background:var(--acc);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none}
+.nr{min-width:40px;height:34px;padding:0 6px;border-radius:17px;background:var(--acc);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;flex:none}
+.stopp{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.verschieb{display:flex;flex-direction:column;gap:6px}.verschieb button{text-align:left;min-height:44px}
 .stopp.fertig .nr{background:var(--ok)}.stopp.fehlt .nr{background:var(--rot)}
 .st{flex:1;min-width:0}.st b{display:block}.st .a{font-size:15px;overflow-wrap:anywhere}
 .haken{width:52px;height:52px;border-radius:50%;font-size:24px;padding:0;flex:none}
@@ -38,7 +40,7 @@ main{padding:12px;padding-bottom:110px;max-width:760px;margin:0 auto}
 .unten{position:fixed;left:0;right:0;bottom:0;z-index:600;background:var(--card);border-top:1px solid var(--line);padding:10px 12px;padding-bottom:max(10px,env(safe-area-inset-bottom))}
 .unten button{width:100%;font-size:19px;min-height:58px;border-radius:14px}
 .unten .ziel{font-size:14px;color:var(--mut);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pin{background:var(--acc);color:#fff;border:2px solid #fff;border-radius:50%;display:flex!important;align-items:center;justify-content:center;font:700 13px Arial;box-shadow:0 1px 4px rgba(0,0,0,.4)}
+.pin{background:var(--acc);color:#fff;border:2px solid #fff;border-radius:15px;display:flex!important;align-items:center;justify-content:center;font:700 12px Arial;box-shadow:0 1px 4px rgba(0,0,0,.4)}
 .pin.fertig{background:#8a9aa5}.pin.naechster{background:#e65100}.pin.start{background:#1d2733}
 .dlg-bg{position:fixed;inset:0;background:rgba(20,30,40,.45);z-index:1000;display:flex;align-items:flex-end;justify-content:center}
 .dlg{background:var(--card);width:100%;max-width:640px;border-radius:18px 18px 0 0;padding:14px;padding-bottom:max(14px,env(safe-area-inset-bottom));max-height:92vh;overflow:auto}
@@ -63,7 +65,7 @@ main{padding:12px;padding-bottom:110px;max-width:760px;margin:0 auto}
 .fahrt-kopf b{flex:1;text-align:center;font-size:18px}
 .fahrt-mitte{flex:1;padding:14px;display:flex;flex-direction:column;gap:10px}
 .fahrt-karte{background:var(--card);border-radius:18px;padding:16px;border:2px solid var(--acc)}
-.fahrt-karte .gnr{width:54px;height:54px;border-radius:50%;background:#e65100;color:#fff;font:700 26px Arial;display:flex;align-items:center;justify-content:center;margin-bottom:8px}
+.fahrt-karte .gnr{min-width:54px;width:fit-content;padding:0 10px;height:54px;border-radius:27px;background:#e65100;color:#fff;font:700 26px Arial;display:flex;align-items:center;justify-content:center;margin-bottom:8px}
 .fahrt-karte .fn{font-size:24px;font-weight:700;line-height:1.2}
 .fahrt-karte .fa{font-size:22px;line-height:1.3;margin-top:4px;overflow-wrap:anywhere}
 .fahrt-karte .fz{background:var(--gelbbg);color:var(--gelb);border-radius:10px;padding:8px 10px;margin-top:10px;font-size:18px}
@@ -98,6 +100,10 @@ let D=null;try{D=JSON.parse(localStorage.getItem(LS))}catch(e){}
 D=D||{einst:{start:null,nav:/iPhone|iPad|Macintosh/.test(navigator.userAgent)?"apple":"google"},touren:[],cache:{}};
 function speichern(){try{localStorage.setItem(LS,JSON.stringify(D))}catch(e){toast("Speichern hat nicht geklappt. Ist der Speicher voll?")}}
 const tour=id=>D.touren.find(t=>t.id===id);
+/* FF-Nummer (Spec 003, 16.11.2026): die Liefernummer aus der Spalte FF der Tourliste (001, 012, 030 …).
+   Sie steht vorne in Liste, Karte und Fahrmodus; Plätze in der Reihenfolge werden nicht mehr als Zahl gezeigt. s.ff fehlt = keine FF. */
+const nrT=s=>s.ff||"–";
+const wer=s=>s.ff?`FF ${s.ff}`:(s.name||s.text);
 
 /* ---------- Liefertage und Urlaub (Spec 002, 31.10.2026) ----------
    s.tage: Wochentage wie Date.getDay() (0 = So), fehlt = jeden Tag. s.urlaub: [{von,bis}] als „JJJJ-MM-TT“, bis = letzter Urlaubstag.
@@ -186,13 +192,17 @@ function zeige(){const a=$("#app");if(seite.art==="fahrt"&&tour(seite.id))a.repl
 
 function tourenSeite(){
   const neu=async()=>{const n=await eingabe("Neue Tour",`Tour ${datum()}`);if(n==null)return;const t={id:neuId(),name:n||`Tour ${datum()}`,erstellt:Date.now(),zurueck:true,stopps:[]};D.touren.unshift(t);speichern();geh({art:"tour",id:t.id})};
-  return[h("header",{},h("h1",{},"Liefertour"),h("button",{onclick:()=>geh({art:"einst"})},"Einstellungen")),
+  // iPhone: Safari und das Symbol auf dem Home-Bildschirm haben getrennte Speicher
+  const imSafari=/iPhone|iPad/.test(navigator.userAgent)&&navigator.standalone===false&&online();
+  return[h("header",{},h("h1",{},"Meine Touren"),h("button",{onclick:()=>geh({art:"einst"})},"Einstellungen")),
     h("main",{},
+      imSafari?h("div",{class:"hinweis"},"Bitte die App über das Symbol auf dem Home-Bildschirm öffnen. Touren aus diesem Safari-Fenster fehlen dort sonst."):null,
       !D.einst.start?h("div",{class:"hinweis",onclick:()=>geh({art:"einst"})},"Bitte zuerst unter Einstellungen den Startpunkt eintragen (z. B. das Lager)."):null,
+      h("p",{class:"klein",style:"margin:0 2px 10px"},"Alle Touren werden automatisch auf diesem Handy gespeichert. Antippen öffnet die Tour, ⋯ zum Umbenennen."),
       h("button",{class:"haupt",style:"width:100%;font-size:19px;min-height:56px;margin-bottom:8px",onclick:neu},"+ Neue Tour"),
       h("button",{style:"width:100%;margin-bottom:12px",onclick:dateiOeffnen},"Tour aus Datei öffnen"),
       D.touren.length?D.touren.map(t=>{const fertig=t.stopps.filter(s=>s.erledigt).length,heute=heuteListe(t,heuteIso()).length;
-        return h("div",{class:"karte-t tour"},h("div",{class:"t",onclick:()=>geh({art:"tour",id:t.id})},h("b",{},t.name),h("span",{class:"klein"},`${t.stopps.length} Stopps${heute<t.stopps.length?` · heute ${heute}`:""}${fertig?` · ${fertig} erledigt`:""}`)),
+        return h("div",{class:"karte-t tour"},h("div",{class:"t",onclick:()=>geh({art:"tour",id:t.id})},h("b",{},t.name),h("span",{class:"klein"},`${t.stopps.length} Stopps${heute<t.stopps.length?` · heute ${heute}`:""}${fertig?` · ${fertig} erledigt`:""}${t.gefahren?` · zuletzt gefahren ${tagName(t.gefahren)}`:""}`)),
           h("button",{onclick:()=>tourMenue(t),"aria-label":"Mehr"},"⋯"))}):h("p",{class:"klein",style:"text-align:center;margin-top:30px"},"Noch keine Touren. Tippe auf „+ Neue Tour“."))]}
 async function tourMenue(t){
   const w=await dialog(t.name,h("div",{style:"display:flex;flex-direction:column;gap:8px"},
@@ -214,6 +224,8 @@ function einstSeite(){
         h("div",{class:"wahl"},navKnopf("google","Google Maps"),navKnopf("apple","Apple Karten"))),
       h("div",{class:"karte-t"},h("b",{},"Gemerkte Adressen"),h("p",{class:"klein",style:"margin:4px 0 8px"},`${Object.keys(D.cache).length} Adressen sind gespeichert und werden beim nächsten Einlesen sofort gefunden.`),
         h("button",{onclick:async()=>{if(await frage("Adressen vergessen","Alle gemerkten Adressen vergessen? Touren bleiben erhalten.","Vergessen","rot")){D.cache={};speichern();zeige()}}},"Gemerkte Adressen vergessen")),
+      h("div",{class:"karte-t"},h("b",{},"Sicherung"),h("p",{class:"klein",style:"margin:4px 0 8px"},`Alle ${D.touren.length} Touren als eine Datei sichern, z. B. per WhatsApp an dich selbst oder in „Dateien“. Mit „Sicherung einlesen“ kommen sie zurück, auch auf ein neues Handy.`),
+        h("div",{class:"reihe",style:"margin:0"},h("button",{class:"haupt",onclick:allesSichern},"Alle Touren sichern"),h("button",{onclick:dateiOeffnen},"Sicherung einlesen"))),
       h("div",{class:"karte-t"},h("b",{},"Andere Fahrer"),h("p",{class:"klein",style:"margin:4px 0 8px"},"Schickt den Link zu dieser App per WhatsApp. Der Fahrer öffnet ihn und legt die App auf seinen Startbildschirm."),
         h("button",{style:"width:100%;background:#e7f8ee;border-color:#9fd8b4;color:#11672f;font-weight:600;margin-bottom:8px",onclick:appWeitergeben},"App per WhatsApp weitergeben"),
         h("button",{style:"width:100%",onclick:()=>window.open("anleitung.html","_blank")},"Anleitung für Fahrer")),
@@ -230,8 +242,9 @@ async function entpacke(s){const buf=unb64(s.slice(1));
   if(s[0]==="z"){const st=new Blob([buf]).stream().pipeThrough(new DecompressionStream("deflate-raw"));return JSON.parse(await new Response(st).text())}
   return JSON.parse(new TextDecoder().decode(buf))}
 // Liefertage und Urlaub hängen hinten an (Stelle 6 und 7); ältere Fassungen der App lesen sie einfach nicht mit
+// Spec 003: FF-Nummer an Stelle 8 (davor ggf. leere Stellen 6/7)
 const tourDaten=t=>({v:1,n:t.name,z:t.zurueck!==false,st:D.einst.start,s:t.stopps.map(s=>{const x=[s.text,s.lat==null?null:+s.lat.toFixed(6),s.lon==null?null:+s.lon.toFixed(6),s.name||"",s.tel||"",s.notiz||""];
-  if(s.tage||s.urlaub)x.push(s.tage||null);if(s.urlaub)x.push(s.urlaub.map(u=>[u.von,u.bis]));return x})});
+  if(s.tage||s.urlaub||s.ff)x.push(s.tage||null);if(s.urlaub||s.ff)x.push(s.urlaub?s.urlaub.map(u=>[u.von,u.bis]):null);if(s.ff)x.push(s.ff);return x})});
 const appUrl=()=>location.href.split("#")[0].split("?")[0];
 const online=()=>/^https?:$/.test(location.protocol);
 async function perWhatsApp(t){if(!t.stopps.length){toast("Die Tour hat noch keine Stopps.");return}
@@ -248,14 +261,28 @@ function tourUebernehmen(d){if(!d||!Array.isArray(d.s))throw new Error("kein Tou
   const t={id:neuId(),name:d.n||`Tour ${datum()}`,erstellt:Date.now(),zurueck:d.z!==false,
     stopps:d.s.map(x=>{const s={id:neuId(),text:String(x[0]||""),lat:x[1]==null?null:+x[1],lon:x[2]==null?null:+x[2],name:x[3]||"",tel:x[4]||"",notiz:x[5]||"",erledigt:false};
       if(Array.isArray(x[6])&&x[6].length&&x[6].length<7)s.tage=x[6].map(Number).filter(n=>n>=0&&n<7);
-      if(Array.isArray(x[7])&&x[7].length)s.urlaub=x[7].filter(u=>Array.isArray(u)&&u[0]&&u[1]).map(u=>({von:String(u[0]),bis:String(u[1])}));return s})};
+      if(Array.isArray(x[7])&&x[7].length)s.urlaub=x[7].filter(u=>Array.isArray(u)&&u[0]&&u[1]).map(u=>({von:String(u[0]),bis:String(u[1])}));
+      if(x[8])s.ff=String(x[8]);return s})};
   if(!D.einst.start&&d.st&&d.st.lat!=null)D.einst.start=d.st; // eigener Startpunkt bleibt, sonst den des Absenders übernehmen
   D.touren.unshift(t);speichern();return t}
 async function anbieten(d){if(await frage("Tour übernehmen",`Tour „${d.n}“ mit ${d.s.length} Stopps übernehmen?`,"Übernehmen")){const t=tourUebernehmen(d);geh({art:"tour",id:t.id})}}
 async function linkPruefen(){const m=location.hash.match(/^#tour=(.+)$/);if(!m)return;history.replaceState(null,"",appUrl());
   try{await anbieten(await entpacke(m[1]))}catch(e){console.warn(e);toast("Der Tour-Link ist beschädigt oder unvollständig. Bitte die Tour als Datei schicken lassen.")}}
 function dateiOeffnen(){const inp=h("input",{type:"file",accept:".json,application/json"});
-  inp.addEventListener("change",async()=>{const f=inp.files[0];if(!f)return;try{await anbieten(JSON.parse(await f.text()))}catch(e){toast("Das ist keine Tour-Datei der Liefertour-App.")}});inp.click()}
+  inp.addEventListener("change",async()=>{const f=inp.files[0];if(!f)return;let d;try{d=JSON.parse(await f.text())}catch(e){toast("Das ist keine Tour-Datei der Liefertour-App.");return}
+    if(d&&d.art==="liefertour-sicherung"){sicherungEinlesen(d);return}
+    try{await anbieten(d)}catch(e){toast("Das ist keine Tour-Datei der Liefertour-App.")}});inp.click()}
+// Sicherung aller Touren (Spec 003): eine Datei mit allen Touren und dem Startpunkt
+async function allesSichern(){if(!D.touren.length){toast("Es gibt noch keine Touren.");return}
+  const name=`Liefertour-Sicherung ${heuteIso()}.liefertour.json`,f=new File([JSON.stringify({art:"liefertour-sicherung",v:1,am:heuteIso(),einst:{start:D.einst.start,nav:D.einst.nav},touren:D.touren})],name,{type:"application/json"});
+  if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f],title:"Liefertour-Sicherung"});return}catch(e){if(e.name==="AbortError")return}}
+  const a=h("a",{href:URL.createObjectURL(f),download:name});document.body.append(a);a.click();a.remove();toast("Sicherung gespeichert (Ordner Downloads).")}
+async function sicherungEinlesen(d){const neu=(d.touren||[]).filter(t=>t&&Array.isArray(t.stopps));if(!neu.length){toast("In der Sicherung sind keine Touren.");return}
+  const da=new Set(D.touren.map(t=>t.id)),gleich=neu.filter(t=>da.has(t.id)).length;
+  if(!await frage("Sicherung einlesen",`${neu.length} Touren vom ${d.am?dT(d.am)+d.am.slice(0,4):"?"} einlesen?${gleich?` ${gleich} davon sind schon da und werden durch die Fassung aus der Sicherung ersetzt.`:""} Andere Touren bleiben.`,"Einlesen"))return;
+  for(const t of neu){const i=D.touren.findIndex(x=>x.id===t.id);if(i>=0)D.touren[i]=t;else D.touren.push(t)}
+  if(!D.einst.start&&d.einst&&d.einst.start)D.einst.start=d.einst.start;
+  tagesWechsel();speichern();geh({art:"touren"});toast(`${neu.length} Touren eingelesen.`)}
 window.addEventListener("hashchange",linkPruefen);
 
 /* ---------- Tour ---------- */
@@ -271,7 +298,7 @@ function tourSeite(t){
       h("div",{id:"tag"}),
       h("div",{id:"karte"},typeof L==="undefined"?h("p",{class:"klein",style:"padding:20px;text-align:center"},"Die Karte braucht Internet."):null),
       h("div",{class:"info",id:"info"}),
-      h("div",{class:"reihe"},h("button",{class:"haupt",onclick:()=>adresseSuchen("Adresse hinzufügen",{mehrfach:true,beiWahl:x=>{t.stopps.push({id:neuId(),text:x.text,lat:x.lat,lon:x.lon,name:"",tel:"",notiz:"",erledigt:false});speichern();aktualisiere(t)}})},"+ Adresse"),
+      h("div",{class:"reihe"},h("button",{class:"haupt",onclick:()=>stoppHinzu(t)},"+ Stopp"),
         h("button",{onclick:()=>fotoScannen(t)},"Foto scannen")),
       h("div",{class:"reihe"},h("button",{onclick:()=>pdfEinlesen(t)},"PDF"),h("button",{onclick:()=>excelEinlesen(t)},"Excel"),h("button",{onclick:()=>listeEinfuegen(t)},"Liste einfügen")),
       h("div",{class:"liste",id:"liste"}),
@@ -296,12 +323,22 @@ function tagZeichnen(t){const el=$("#tag");if(!el)return;const tag=tagIso(),h0=h
 function infoZeichnen(t){const i=$("#info");if(!i)return;const H=heuteListe(t),offen=H.filter(s=>!fertig(s)).length,fehlt=H.filter(s=>s.lat==null).length;
   i.replaceChildren(...[h("span",{},`${H.length} Stopps · ${offen} offen`),fehlt?h("span",{style:"color:var(--rot)"},`${fehlt} nicht gefunden`):null,
     strecke&&strecke.key===streckeKey?h("span",{},`ca. ${kmT(strecke.km)} km · ${zeitT(strecke.min)}`):h("span",{},H.length?"Strecke wird berechnet …":"")].filter(Boolean))}
-function untenZeichnen(t){const u=$("#unten");if(!u)return;const n=naechster(t),idx=n?t.stopps.indexOf(n)+1:0,H=heuteListe(t);
+// Stopp selbst eintragen (Spec 003): zuerst die FF-Nummer, dann die Adresse; danach gleich der nächste, bis „Fertig“
+async function stoppHinzu(t){let n=0;
+  for(;;){const f=h("input",{placeholder:"z. B. 012",inputmode:"numeric",autocomplete:"off"});
+    f.addEventListener("keydown",e=>{if(e.key==="Enter")f.closest(".dlg").querySelector(".dlg-fuss .haupt").click()});
+    const w=await dialog(n?`Nächster Stopp (${n} hinzugefügt)`:"Neuer Stopp",h("label",{class:"feld"},"FF-Nummer (Liefernummer aus der Liste)",f,h("span",{class:"klein"},"Leer lassen, wenn es keine gibt.")),
+      [{text:n?"Fertig":"Abbrechen",wert:null},{text:"Weiter zur Adresse",klasse:"haupt",wert:"ok"}]);
+    if(w!=="ok")return;const ff=f.value.trim();let wahl=null;
+    await adresseSuchen(ff?`Adresse für FF ${ff}`:"Adresse",{beiWahl:x=>{wahl=x}});
+    if(!wahl)return;
+    t.stopps.push({id:neuId(),text:wahl.text,lat:wahl.lat,lon:wahl.lon,name:"",tel:"",notiz:"",erledigt:false,...(ff?{ff}:{})});n++;speichern();aktualisiere(t)}}
+function untenZeichnen(t){const u=$("#unten");if(!u)return;const n=naechster(t),H=heuteListe(t);
   if(ansichtTag)u.replaceChildren(h("div",{class:"ziel"},`Vorschau für ${tagName(ansichtTag)}. Gefahren wird immer die Tour von heute.`),h("button",{class:"haupt",onclick:()=>{ansichtTag=null;karteZeichnen(true);aktualisiere(t)}},"Zurück zu heute"));
-  else if(n)u.replaceChildren(h("div",{class:"ziel"},`Nächster Stopp ${idx}: ${n.name?n.name+", ":""}${n.text}`),
-    h("button",{class:"start",onclick:()=>{geh({art:"fahrt",id:t.id});navigiere(n)}},H.some(s=>s.erledigt)?`▶ Fahrt fortsetzen (Stopp ${idx})`:"▶ Fahrt starten"));
+  else if(n)u.replaceChildren(h("div",{class:"ziel"},`Nächster Stopp: ${n.ff?"FF "+n.ff+" · ":""}${n.name?n.name+", ":""}${n.text}`),
+    h("button",{class:"start",onclick:()=>{t.gefahren=heuteIso();geh({art:"fahrt",id:t.id});navigiere(n)}},H.some(s=>s.erledigt)?`▶ Fahrt fortsetzen${n.ff?" (FF "+n.ff+")":""}`:"▶ Fahrt starten"));
   else if(H.length&&t.zurueck!==false&&D.einst.start)u.replaceChildren(h("div",{class:"ziel"},"Alle Stopps erledigt."),h("button",{class:"haupt",onclick:()=>navigiere(D.einst.start)},"Zurück zum Start navigieren"));
-  else u.replaceChildren(h("div",{class:"ziel"},H.length?"Alle Stopps erledigt.":t.stopps.length?"Heute ist kein Kunde dran.":"Noch keine Stopps. Oben „+ Adresse“ oder „Liste einfügen“."))}
+  else u.replaceChildren(h("div",{class:"ziel"},H.length?"Alle Stopps erledigt.":t.stopps.length?"Heute ist kein Kunde dran.":"Noch keine Stopps. Oben „+ Stopp“, „Foto scannen“ oder „PDF“."))}
 // Kleine Marke im Stopp: Liefertage (wenn nicht jeden Tag) und der nächste Urlaub
 function marken(s){const tag=tagIso(),u=(s.urlaub||[]).find(x=>x.bis>=tag);
   return[s.tage?h("span",{class:"marke"},tageText(s.tage)):null,u?h("span",{class:"marke urlaub",style:"margin-left:4px"},u.von<=tag?`🏖 Urlaub bis ${dT(u.bis)}`:`🏖 ab ${dT(u.von)}`):null]}
@@ -309,7 +346,7 @@ function listeZeichnen(t){const l=$("#liste");if(!l)return;const n=naechster(t),
   l.replaceChildren(...t.stopps.map((s,i)=>{
     const g=grund(s,tag);if(g){weg.push([s,i,g]);return null}
     const griff=h("div",{class:"griff","aria-label":"Ziehen zum Verschieben"},"⋮⋮");
-    const zeile=h("div",{class:"stopp"+(fertig(s)?" fertig":"")+(s===n?" naechster":"")+(s.lat==null?" fehlt":""),"data-id":s.id},griff,h("div",{class:"nr"},fertig(s)?"✓":i+1),
+    const zeile=h("div",{class:"stopp"+(fertig(s)?" fertig":"")+(s===n?" naechster":"")+(s.lat==null?" fehlt":""),"data-id":s.id},griff,h("div",{class:"nr"},nrT(s)),
       h("div",{class:"st",onclick:()=>stoppDialog(t,s)},s.name?h("b",{},s.name):null,h("div",{class:"a"},s.text),s.lat==null?h("div",{class:"klein",style:"color:var(--rot)"},"nicht gefunden: antippen und korrigieren"):null,
         s.notiz?h("div",{class:"klein"},s.notiz):null,marken(s),strecke&&strecke.key===streckeKey&&strecke.zu[s.id]?h("div",{class:"klein"},`+${kmT(strecke.zu[s.id].km)} km · ${zeitT(strecke.zu[s.id].min)}`):null),
       ansichtTag?null:h("button",{class:"haken","aria-label":s.erledigt?"Wieder öffnen":"Erledigt",onclick:()=>{abhaken(s,!s.erledigt);speichern();aktualisiere(t)}},"✓"));
@@ -317,33 +354,56 @@ function listeZeichnen(t){const l=$("#liste");if(!l)return;const n=naechster(t),
   // Wer an diesem Tag nicht dran ist: grau darunter, mit Grund; antippen öffnet den Stopp (z. B. Urlaub löschen)
   const alt=$("#nicht");if(alt)alt.remove();
   if(weg.length)l.after(h("div",{id:"nicht"},h("div",{class:"nicht-kopf"},`${ansichtTag?"An diesem Tag":"Heute"} nicht (${weg.length})`),
-    h("div",{class:"liste"},...weg.map(([s,i,g])=>h("div",{class:"stopp nicht",onclick:()=>stoppDialog(t,s)},h("div",{class:"nr"},i+1),
+    h("div",{class:"liste"},...weg.map(([s,i,g])=>h("div",{class:"stopp nicht",onclick:()=>stoppDialog(t,s)},h("div",{class:"nr"},nrT(s)),
       h("div",{class:"st"},s.name?h("b",{},s.name):null,h("div",{class:"a"},s.text),h("div",{class:"klein",style:g.startsWith("Urlaub")?"color:var(--gelb)":""},(g.startsWith("Urlaub")?"🏖 ":"")+g)))))))}
-// Reihenfolge mit dem Finger: am Griff ziehen, die Zeile wandert mit, beim Loslassen wird die neue Reihenfolge gespeichert
+/* Reihenfolge mit dem Finger (Spec 003): am Griff ⋮⋮ sofort ziehen oder die ganze Zeile lange drücken (0,4 s) und ziehen.
+   Die gezogene Zeile selbst bleibt im Bildschirm stehen, die anderen rücken an ihr vorbei. Vorher wurde die Zeile umgesetzt,
+   dabei verlor das Handy den Finger und es ging nur einen Platz weit. Am oberen/unteren Rand rollt die Liste mit. */
 function ziehen(t,griff,zeile,l){
-  griff.addEventListener("pointerdown",e=>{e.preventDefault();griff.setPointerCapture(e.pointerId);zeile.classList.add("zieht");
-    const move=ev=>{const y=ev.clientY;if(y<80)window.scrollBy(0,-14);else if(y>innerHeight-150)window.scrollBy(0,14);
-      let vor=null;for(const x of l.children){if(x===zeile)continue;const r=x.getBoundingClientRect();if(y<r.top+r.height/2){vor=x;break}}
-      if(vor!==zeile.nextSibling&&vor!==zeile)l.insertBefore(zeile,vor)};
-    const ende=()=>{griff.removeEventListener("pointermove",move);zeile.classList.remove("zieht");
-      // Nur die sichtbaren Stopps tauschen ihre Plätze; wer heute nicht dran ist, behält seinen Platz in der Reihenfolge
-      const ids=[...l.children].map(x=>x.dataset.id),vorher=t.stopps.map(s=>s.id).join(),neu=ids.map(id=>t.stopps.find(s=>s.id===id));let k=0;
-      t.stopps=t.stopps.map(s=>ids.includes(s.id)?neu[k++]:s);
-      if(t.stopps.map(s=>s.id).join()!==vorher){speichern();aktualisiere(t)}else listeZeichnen(t)};
-    griff.addEventListener("pointermove",move);griff.addEventListener("pointerup",ende,{once:true});griff.addEventListener("pointercancel",ende,{once:true})})}
+  let aktiv=false,lang=null,pid=null,sx=0,sy=0,y=0,roll=0,sperre=false;
+  const ordnen=()=>{let p=zeile.previousElementSibling,n=zeile.nextElementSibling;
+    while(p){const r=p.getBoundingClientRect();if(y>=r.top+r.height/2)break;l.insertBefore(p,zeile.nextSibling);p=zeile.previousElementSibling}
+    while(n){const r=n.getBoundingClientRect();if(y<=r.top+r.height/2)break;l.insertBefore(n,zeile);n=zeile.nextElementSibling}};
+  const rollen=()=>{if(!aktiv)return;const d=y<90?-12:y>innerHeight-160?12:0;if(d){window.scrollBy(0,d);ordnen()}roll=requestAnimationFrame(rollen)};
+  const los=()=>{aktiv=true;lang=null;zeile.classList.add("zieht");try{zeile.setPointerCapture(pid)}catch(e){}if(navigator.vibrate)navigator.vibrate(30);roll=requestAnimationFrame(rollen)};
+  const move=e=>{if(e.pointerId!==pid)return;y=e.clientY;
+    if(!aktiv){if(lang&&Math.hypot(e.clientX-sx,e.clientY-sy)>10){clearTimeout(lang);lang=null;weg()}return} // Finger bewegt sich vorher: das ist Rollen
+    e.preventDefault();ordnen()};
+  const weg=()=>{removeEventListener("pointermove",move);removeEventListener("pointerup",ende);removeEventListener("pointercancel",ende)};
+  const ende=e=>{if(e&&e.pointerId!==pid)return;weg();clearTimeout(lang);lang=null;if(!aktiv)return;aktiv=false;cancelAnimationFrame(roll);zeile.classList.remove("zieht");sperre=true;setTimeout(()=>sperre=false,350);
+    // Nur die sichtbaren Stopps tauschen ihre Plätze; wer heute nicht dran ist, behält seinen Platz in der Reihenfolge
+    const ids=[...l.children].map(x=>x.dataset.id),vorher=t.stopps.map(s=>s.id).join(),neu=ids.map(id=>t.stopps.find(s=>s.id===id));let k=0;
+    t.stopps=t.stopps.map(s=>ids.includes(s.id)?neu[k++]:s);
+    if(t.stopps.map(s=>s.id).join()!==vorher){speichern();aktualisiere(t)}else listeZeichnen(t)};
+  const start=(e,sofort)=>{if(aktiv||lang)return;pid=e.pointerId;sx=e.clientX;sy=y=e.clientY;
+    addEventListener("pointermove",move,{passive:false});addEventListener("pointerup",ende);addEventListener("pointercancel",ende);
+    if(sofort){e.preventDefault();los()}else lang=setTimeout(los,400)};
+  griff.addEventListener("pointerdown",e=>start(e,true));
+  zeile.addEventListener("pointerdown",e=>{if(e.target.closest(".griff,button")||(e.pointerType==="mouse"&&e.button!==0))return;start(e,false)});
+  zeile.addEventListener("touchmove",e=>{if(aktiv)e.preventDefault()},{passive:false}); // während des Ziehens nicht rollen
+  zeile.addEventListener("contextmenu",e=>e.preventDefault());
+  zeile.addEventListener("click",e=>{if(sperre){e.stopPropagation();e.preventDefault()}},true)} // Loslassen öffnet nicht den Stopp
+// Stopp an eine andere Stelle setzen (für weite Wege): Liste aller Stopps, antippen = davor einsetzen
+async function verschieben(t,s){
+  const box=h("div",{class:"verschieb"},...t.stopps.filter(x=>x!==s).map(x=>h("button",{onclick:e=>{e.target.closest(".dlg-bg").remove();setze(x)}},`vor ${x.ff?"FF "+x.ff:"–"} · ${x.name||x.text}`)),
+    h("button",{onclick:e=>{e.target.closest(".dlg-bg").remove();setze(null)}},"ganz ans Ende"));
+  function setze(x){t.stopps.splice(t.stopps.indexOf(s),1);if(x)t.stopps.splice(t.stopps.indexOf(x),0,s);else t.stopps.push(s);speichern();aktualisiere(t);toast(`${wer(s)} verschoben.`)}
+  await dialog(`${wer(s)} verschieben`,box,[])}
 async function stoppDialog(t,s){
   const i=t.stopps.indexOf(s);
+  const ffF=h("input",{value:s.ff||"",placeholder:"z. B. 012",inputmode:"numeric"});
   const name=h("input",{value:s.name||"",placeholder:"Name (freiwillig)"}),tel=h("input",{value:s.tel||"",placeholder:"Telefon (freiwillig)",type:"tel"}),notiz=h("textarea",{rows:2,placeholder:"Notiz, z. B. Hinterhof, 2. Etage",value:s.notiz||""});
   const knopf=(text,fn,kl="")=>h("button",{class:kl,onclick:e=>{e.target.closest(".dlg-bg").remove();uebernehmen();fn()}},text);
-  const uebernehmen=()=>{s.name=name.value.trim();s.tel=tel.value.trim();s.notiz=notiz.value.trim();speichern();aktualisiere(t)};
+  const uebernehmen=()=>{const f=ffF.value.trim();if(f)s.ff=f;else delete s.ff;s.name=name.value.trim();s.tel=tel.value.trim();s.notiz=notiz.value.trim();speichern();aktualisiere(t)};
   const g=grund(s,tagIso());
-  const w=await dialog(`Stopp ${i+1}`,h("div",{},h("p",{style:"margin:0 0 10px"},s.text),
+  const w=await dialog(s.ff?`FF ${s.ff}`:"Stopp",h("div",{},h("p",{style:"margin:0 0 10px"},s.text),
       g?h("div",{class:"hinweis"},`${ansichtTag?tagName(ansichtTag):"Heute"} nicht dran: ${g}`):null,
-      h("label",{class:"feld"},"Name",name),h("label",{class:"feld"},"Telefon",tel),h("label",{class:"feld"},"Notiz",notiz),
+      h("label",{class:"feld"},"FF-Nummer",ffF),h("label",{class:"feld"},"Name",name),h("label",{class:"feld"},"Telefon",tel),h("label",{class:"feld"},"Notiz",notiz),
       h("div",{class:"feld"},"Liefertage",tageWahl(s)),
       h("div",{class:"feld"},"Urlaub",urlaubWahl(s)),
       h("div",{class:"reihe"},knopf("Navigieren",()=>navigiere(s),"haupt"),s.tel?knopf("Anrufen",()=>{location.href="tel:"+s.tel.replace(/[^\d+]/g,"")}):null),
       h("div",{class:"reihe"},knopf("▲ Nach oben",()=>{if(i>0){t.stopps.splice(i,1);t.stopps.splice(i-1,0,s);speichern();aktualisiere(t)}}),knopf("▼ Nach unten",()=>{if(i<t.stopps.length-1){t.stopps.splice(i,1);t.stopps.splice(i+1,0,s);speichern();aktualisiere(t)}})),
+      h("div",{class:"reihe"},knopf("An andere Stelle verschieben …",()=>verschieben(t,s))),
       h("div",{class:"reihe"},knopf("Adresse ändern",()=>adresseSuchen("Adresse ändern",{beiWahl:x=>{Object.assign(s,{text:x.text,lat:x.lat,lon:x.lon});speichern();aktualisiere(t)}})),
         knopf("Stopp löschen",async()=>{if(await frage("Stopp löschen",`${s.text} aus der Tour löschen?`,"Löschen","rot")){t.stopps=t.stopps.filter(x=>x!==s);speichern();aktualisiere(t)}},"rot"))),
     [{text:"Fertig",klasse:"haupt",wert:"ok"}]);
@@ -380,7 +440,7 @@ async function einlesen(t,eintraege){
     try{r=await finde(e.q,!!e.mitName)}catch(x){}
     if(!imSpeicher)await new Promise(ok=>setTimeout(ok,350)); // die freie Adresssuche nicht überlasten
     n++;if(!r)fehlt++;
-    t.stopps.push({id:neuId(),text:r?r.text:e.q,lat:r?r.lat:null,lon:r?r.lon:null,name:e.name||(r&&r.name)||"",tel:e.tel||"",notiz:e.notiz||"",erledigt:false,...(e.tage?{tage:e.tage}:{})});
+    t.stopps.push({id:neuId(),text:r?r.text:e.q,lat:r?r.lat:null,lon:r?r.lon:null,name:e.name||(r&&r.name)||"",tel:e.tel||"",notiz:e.notiz||"",erledigt:false,...(e.tage?{tage:e.tage}:{}),...(e.ff?{ff:e.ff}:{})});
     speichern();if(seite.id===t.id)aktualisiere(t,true);toast(`Adressen werden gesucht: ${n} von ${eintraege.length}`)}
   if(seite.id===t.id)aktualisiere(t);toast(fehlt?`${eintraege.length-fehlt} gefunden, ${fehlt} nicht gefunden (rot, bitte antippen und korrigieren).`:`Alle ${eintraege.length} Adressen gefunden.`)}
 /* Excel (.xlsx, .xls, .csv): SheetJS wird erst beim ersten Gebrauch geladen. Spalten werden an der Kopfzeile erkannt,
@@ -390,11 +450,11 @@ function excelZeilen(rows){rows=rows.filter(r=>r.some(c=>String(c).trim()));if(!
   // Überschriften enthalten keine Ziffern; so wird „Waisenstraße 22“ in der ersten Zeile nicht für eine Kopfzeile gehalten
   const kopf=rows[0].map(c=>String(c).toLowerCase().trim()),such=re=>kopf.findIndex(c=>re.test(c)&&!/\d/.test(c));
   const sp={name:such(/^(name|kunde|empfänger|empfaenger|firma)/),str:such(/stra(ss|ß)e|^adresse|anschrift/),nr:such(/^hausn|^hnr|^nr\.?$/),plz:such(/^plz|postleitzahl/),
-    ort:such(/^(ort|stadt|wohnort)/),tel:such(/^tel|telefon|handy|mobil/),notiz:such(/notiz|bemerk|hinweis|^info/),tage:such(/liefertag|^tage|wochentag|^liefern/)};
+    ort:such(/^(ort|stadt|wohnort)/),tel:such(/^tel|telefon|handy|mobil/),notiz:such(/notiz|bemerk|hinweis|^info/),tage:such(/liefertag|^tage|wochentag|^liefern(?!r|umm)/),ff:such(/^ff\.?$|^lfd|liefernr|liefernumm|^pos/),kd:such(/^kd|^kdnr|kundennr|kundennumm/)};
   if(sp.str<0&&sp.plz<0&&sp.ort<0)return rows.map(r=>({q:r.map(c=>String(c).trim()).filter(Boolean).join(", "),mitName:true}));
   const g=(r,i)=>i>=0?String(r[i]).trim():"";
   return rows.slice(1).map(r=>({q:[[g(r,sp.str),sp.str>=0?g(r,sp.nr):""].filter(Boolean).join(" "),[g(r,sp.plz),g(r,sp.ort)].filter(Boolean).join(" ")].filter(Boolean).join(", "),
-    name:g(r,sp.name),tel:g(r,sp.tel),notiz:g(r,sp.notiz),tage:tageLesen(g(r,sp.tage))})).filter(e=>e.q)}
+    name:g(r,sp.name),tel:g(r,sp.tel),notiz:[g(r,sp.kd)?`Kd. ${g(r,sp.kd)}`:"",g(r,sp.notiz)].filter(Boolean).join(" · "),tage:tageLesen(g(r,sp.tage)),ff:g(r,sp.ff)})).filter(e=>e.q)}
 function excelEinlesen(t){const inp=h("input",{type:"file",accept:".xlsx,.xls,.csv,.ods"});
   inp.addEventListener("change",async()=>{const f=inp.files[0];if(!f)return;
     try{await excelLaden()}catch(e){toast("Der Excel-Leser lädt nicht. Ist das Handy online?");return}
@@ -424,7 +484,7 @@ async function bildVorbereiten(datei){const bmp=await createImageBitmap(datei),f
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=(y*W+x)*4,v=p[i]<mit[Math.floor(y/B)*bx+Math.floor(x/B)]-18?0:255;p[i]=p[i+1]=p[i+2]=v}
   g.putImageData(d,0,0);return{grau,sw}}
 // Eine gelesene Zeile säubern: Anführungszeichen, Satzzeichen und kurzen Müll am Ende entfernen
-function saeubern(s){s=s.replace(/[‘’‚„“”'`´;:|©®°•…_~»«\[\]{}()]/g," ").replace(/\s[.,\-]+(?=\s|$)/g," ").replace(/\s+/g," ").trim().replace(/^[^0-9A-Za-zÄÖÜäöüß]+/,"").replace(/[.,\-]+$/,"").trim();
+function saeubern(s){s=s.replace(/[‘’‚„“”'`´;:|©®°•…_~»«\[\]{}()—–£€§]/g," ").replace(/\s[.,\-]+(?=\s|$)/g," ").replace(/\s+/g," ").trim().replace(/^[^0-9A-Za-zÄÖÜäöüß]+/,"").replace(/[.,\-]+$/,"").trim();
   return s.replace(/^([0-9OolI]{5})(\s)/,(m,q,l)=>/\d{3}/.test(q)?q.replace(/[Oo]/g,"0").replace(/[lI]/g,"1")+l:m)} // O→0, l/I→1 in der PLZ
 function adressenAusText(text){
   // Hinweis in Klammern am Zeilenende merken („Lindenweg 5 (im NORMA)“, „Müller (Extra Stellen)“), er kommt in Notiz bzw. Name
@@ -433,21 +493,36 @@ function adressenAusText(text){
     if(/^\d{5}\s/.test(s)){while(s.split(" ").length>2&&/\s\S{1,2}$/.test(s))s=s.replace(/\s\S{1,2}$/,"")} // „03222 Lübbenau N u“
     else s=s.replace(/(\s\d{1,4}(?:\s?[a-zA-Z])?)\s+(?![a-zA-Z]$)\S{1,3}$/,"$1"); // „Topfmarkt 10 WO“, aber „Straße 38 C“ bleibt
     hinweis.push(h);return s});
-  const istOrt=s=>/^\d{5}\s+[A-Za-zÄÖÜäöüß]/.test(s);
+  const istOrt=s=>/^\d{5}\s+[A-Za-zÄÖÜäöüß]/.test(s)&&!/\s\d{2,}$/.test(s); // „19688 Rewe 40771“ ist eine Namenszeile, kein Ort
   const istStr=s=>!istOrt(s)&&/[A-Za-zÄÖÜäöüß]{3}.*\s\d{1,4}\s?[a-zA-Z]?(\s?[-\/]\s?\d{1,4}[a-zA-Z]?)?$/.test(s);
   const out=[],benutzt=new Set();
   for(let i=1;i<z.length;i++){if(!istOrt(z[i])||!istStr(z[i-1]))continue;benutzt.add(i).add(i-1);
-    const vor=i>=2?z[i-2]:"";let name="",kd="";
+    const vor=i>=2?z[i-2]:"";let name="",kd="",ff="";
     // Namenszeile darüber: nicht die PLZ-Zeile des vorigen Blocks; „19310 Netto Supermarkt 6128“ endet zwar auf Ziffern, beginnt aber mit der Kundennummer
-    if(vor&&!istOrt(vor)&&(!istStr(vor)||/^\d/.test(vor))){const m=vor.match(/^(?:\d{1,4}\s+)?(\d{4,6})\s+(.+)$/);if(m){kd=m[1];name=m[2]}else name=vor.replace(/^\d+\s+/,"")}
+    // Spec 003: „005 001 16975 Remi …“ (Tour, FF, KDNR) bzw. „012 35278 Marktkauf 7328“ (FF, KDNR): die Zahl direkt vor der Kundennummer ist die FF.
+    // Gesucht wird nicht nur am Zeilenanfang, damit Handschrift am Rand („Extra Stellen 060 19149 Müller“) nicht stört.
+    if(vor&&!istOrt(vor)&&(!istStr(vor)||/^\d/.test(vor)||/\s\d{1,4}\s+\d{4,6}\s+\D/.test(vor))){
+      const m=vor.match(/(?:^|\s)([0-9Oo]{1,4})\s+(\d{4,6})\s+(\D.*)$/),m2=!m&&vor.match(/^(\d{4,6})\s+(.+)$/);
+      if(m){ff=m[1].replace(/[Oo]/g,"0");kd=m[2];name=m[3]}else if(m2){kd=m2[1];name=m2[2]}else name=vor.replace(/^\d+\s+/,"")}
     if(name&&hinweis[i-2])name+=` (${hinweis[i-2]})`;
-    out.push({q:`${z[i-1]}, ${z[i]}`,name:name.trim(),notiz:[kd?`Kd. ${kd}`:"",hinweis[i-1]].filter(Boolean).join(" · ")})}
+    out.push({q:`${z[i-1]}, ${z[i]}`,name:name.trim(),ff,notiz:[kd?`Kd. ${kd}`:"",hinweis[i-1]].filter(Boolean).join(" · ")})}
+  // Namenszeile mit FF und Kundennummer, darunter die Straße, aber die Ortszeile fehlt (z. B. von Handschrift überdeckt):
+  // Straße trotzdem aufnehmen; der Ort kommt beim Zusammenführen aus der zweiten Lesung oder wird in der Prüfliste ergänzt
+  z.forEach((s,i)=>{if(benutzt.has(i)||benutzt.has(i+1)||!z[i+1]||!istStr(z[i+1]))return;const m=s.match(/(?:^|\s)([0-9Oo]{2,4})\s+(\d{4,6})\s+(\D.*)$/);if(!m)return;
+    benutzt.add(i).add(i+1);out.push({q:z[i+1],name:m[3].trim(),ff:m[1].replace(/[Oo]/g,"0"),notiz:`Kd. ${m[2]}`,ohneOrt:true})});
   // Dazu Adressen in einer Zeile („Hauptstr. 5, 03046 Cottbus“, auch mit Name davor), wie sie in vielen PDF-Listen stehen
   z.forEach((s,i)=>{if(benutzt.has(i))return;
     const m=s.match(/^(?:(.*?),\s*)?([A-Za-zÄÖÜäöüß][^,]*?[A-Za-zäöüß.]\s\d{1,4}\s?[a-zA-Z]?)[,\s]+(\d{5}\s+[A-Za-zÄÖÜäöüß][^,]*)$/);
     if(m)out.push({q:`${m[2].trim()}, ${m[3].trim()}`,name:(m[1]||"").replace(/^\d+\s+/,"").trim(),notiz:""})});
   return out}
 window.__adressenAusText=adressenAusText; // zum Prüfen
+/* Handschrift ignorieren (Spec 003): Steht oben die Kopfzeile mit „Mo Di Mi …“, werden alle Wörter ab der Spalte „Mo“ weggelassen
+   (dort stehen handschriftliche Mengen), ebenso alles links von „TOUR“ (Randnotizen wie „Extra Stellen“). Ohne diese Kopfzeile bleibt der Text, wie er ist. */
+function ohneTagesSpalten(d){const W=d.words||[];
+  const mo=W.find(w=>/^Mo$/i.test(w.text)&&W.some(v=>/^Di$/i.test(v.text)&&Math.abs(v.bbox.y0-w.bbox.y0)<25&&v.bbox.x0>w.bbox.x0));
+  if(!mo||!d.lines||!d.lines.length)return d.text;
+  const rechts=mo.bbox.x0-8,tour=W.find(w=>/^TOUR$/i.test(w.text)),links=tour?tour.bbox.x0-8:-1;
+  return d.lines.map(l=>l.words.filter(w=>w.bbox.x0<rechts&&w.bbox.x1>links).map(w=>w.text).join(" ")).join("\n")}
 function fotoScannen(t,liste=[]){const inp=h("input",{type:"file",accept:"image/*",capture:"environment"});
   inp.addEventListener("change",async()=>{const f=inp.files[0];if(!f)return;const neu=await fotoLesen(f);if(neu==null){if(liste.length)pruefen(t,liste);return}
     liste.push(...neu);pruefen(t,liste,neu.length)});inp.click()}
@@ -458,13 +533,19 @@ async function fotoLesen(datei,titel="Foto wird gelesen"){
   document.body.append(bg);
   try{ocrFort=m=>{st.textContent=m.status==="recognizing text"?`Text wird gelesen … ${Math.round((m.progress||0)*100)} %`:"Texterkennung wird vorbereitet …"};
     const w=await ocrLaden(),b=await bildVorbereiten(datei);
-    await w.setParameters({tessedit_pageseg_mode:"4"});const a=adressenAusText((await w.recognize(b.sw)).data.text);
-    await w.setParameters({tessedit_pageseg_mode:"3"});const c=adressenAusText((await w.recognize(b.grau)).data.text);
+    await w.setParameters({tessedit_pageseg_mode:"4"});const a=adressenAusText(ohneTagesSpalten((await w.recognize(b.sw)).data));
+    await w.setParameters({tessedit_pageseg_mode:"3"});const c=adressenAusText(ohneTagesSpalten((await w.recognize(b.grau)).data));
     // zusammenführen: Reihenfolge der Schwarz-weiß-Fassung, fehlende aus der grauen ergänzen; vollständigere Lesung gewinnt
     const key=e=>e.q.toLowerCase().replace(/[^a-zäöüß0-9]/g,"").replace(/stra(ss|ß)e$/,"str").slice(0,10);
-    for(const e of c){const da=a.find(x=>key(x)===key(e)||x.q.split(",")[0].slice(0,6).toLowerCase()===e.q.split(",")[0].slice(0,6).toLowerCase());
-      if(!da)a.push(e);else{if(e.q.length>da.q.length&&/\d/.test(e.q.split(",")[0]))da.q=e.q;if(!da.name||(e.name&&/^[A-ZÄÖÜa-zäöüß -]+$/.test(e.name)&&e.name.length>=da.name.length))da.name=e.name||da.name;if(!da.notiz)da.notiz=e.notiz}}
-    return a}
+    // gleiche Straße, auch wenn eine Lesung vorne etwas verliert („Am Telering 8“ / „Telering 8“)
+    const str=e=>{const m=e.q.split(",")[0].toLowerCase().match(/^(.*?)\s*(\d+)\s*[a-z]?$/);return m?{n:m[1].replace(/[^a-zäöüß]/g,"").replace(/(strasse|straße|str)$/,""),h:m[2]}:null};
+    const gleich=(x,e)=>{const p=str(x),q=str(e);return p&&q&&p.h===q.h&&Math.min(p.n.length,q.n.length)>=5&&(p.n.endsWith(q.n)||q.n.endsWith(p.n))};
+    for(const e of c){const da=a.find(x=>key(x)===key(e)||x.q.split(",")[0].slice(0,6).toLowerCase()===e.q.split(",")[0].slice(0,6).toLowerCase()||gleich(x,e));
+      if(!da)a.push(e);else{if(!da.ff&&e.ff)da.ff=e.ff;if(da.ohneOrt&&/,\s*\d{5}\s/.test(e.q)){da.q=da.q.split(",")[0]+", "+e.q.split(",").slice(1).join(",").trim();delete da.ohneOrt}
+        else if(e.q.length>da.q.length&&/\d/.test(e.q.split(",")[0]))da.q=e.q;if(!da.name||(e.name&&/^[A-ZÄÖÜa-zäöüß -]+$/.test(e.name)&&e.name.length>=da.name.length))da.name=e.name||da.name;if(!da.notiz)da.notiz=e.notiz}}
+    // Haben die meisten eine FF-Nummer, ist sie die Reihenfolge der Liste (die Texterkennung liest manchmal Blöcke durcheinander)
+    if(a.filter(e=>e.ff).length*2>=a.length){const mit=a.filter(e=>e.ff).sort((x,y)=>parseInt(x.ff,10)-parseInt(y.ff,10)),ohne=a.filter(e=>!e.ff);a.length=0;a.push(...mit,...ohne)}
+    a.forEach(e=>delete e.ohneOrt);return a}
   catch(e){console.warn(e);toast("Die Texterkennung lädt nicht. Ist das Handy online?");return null}
   finally{ocrFort=null;bg.remove()}}
 /* ---------- PDF einlesen (Wunsch 31.10.2026): Tourenliste als PDF ----------
@@ -499,16 +580,17 @@ async function pruefen(t,liste,neu){
   const box=h("div");
   const zeichneP=()=>box.replaceChildren(...(liste.length?liste.map((e,i)=>{
       const n=h("input",{value:e.name,placeholder:"Name (freiwillig)",style:"margin-bottom:6px;font-weight:600"}),a=h("input",{value:e.q,placeholder:"Straße Nr, PLZ Ort"});
-      n.addEventListener("input",()=>e.name=n.value);a.addEventListener("input",()=>e.q=a.value);
-      return h("div",{class:"karte-t",style:"padding:8px 10px;margin-bottom:6px"},h("div",{style:"display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"},
-          h("b",{},`${i+1}.${e.notiz?" · "+e.notiz:""}`),h("button",{class:"rot",style:"min-height:38px;padding:4px 12px",onclick:()=>{liste.splice(i,1);zeichneP()}},"✕ Entfernen")),n,a)}):
+      const ff=h("input",{value:e.ff||"",placeholder:"FF",inputmode:"numeric",style:"width:80px;padding:6px 8px;font-weight:700"});
+      n.addEventListener("input",()=>e.name=n.value);a.addEventListener("input",()=>e.q=a.value);ff.addEventListener("input",()=>e.ff=ff.value.trim());
+      return h("div",{class:"karte-t",style:"padding:8px 10px;margin-bottom:6px"},h("div",{style:"display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px"},
+          h("label",{style:"display:flex;align-items:center;gap:6px"},h("span",{class:"klein"},"FF"),ff,h("span",{class:"klein"},e.notiz||"")),h("button",{class:"rot",style:"min-height:38px;padding:4px 12px",onclick:()=>{liste.splice(i,1);zeichneP()}},"✕ Entfernen")),n,a)}):
     [h("p",{},"Auf dem Foto wurde keine Adresse erkannt. Bitte das Papier gerade, hell und scharf fotografieren.")]));
   zeichneP();
   const weiter=h("button",{style:"width:100%;margin-top:6px",onclick:()=>{weiter.closest(".dlg-bg").remove();fotoScannen(t,liste)}},"+ Weiteres Foto");
   const w=await dialog(neu!=null?`${neu} Adressen erkannt`:"Adressen prüfen",h("div",{},h("p",{class:"klein",style:"margin-top:0"},"Bitte kurz prüfen und Lesefehler korrigieren. Erst mit „Einlesen“ kommen die Adressen in die Tour, das Foto wird nicht gespeichert."),box,weiter),
     [{text:"Abbrechen",wert:null},{text:`Einlesen (${liste.length})`,klasse:"haupt",wert:"ok"}]);
   if(w!=="ok")return;const e=liste.filter(x=>x.q.trim());if(!e.length)return;
-  einlesen(t,e.map(x=>({q:x.q.trim(),mitName:false,name:x.name.trim(),notiz:x.notiz})))}
+  einlesen(t,e.map(x=>({q:x.q.trim(),mitName:false,name:x.name.trim(),notiz:x.notiz,ff:(x.ff||"").trim()})))}
 
 /* ---------- Fahrmodus (Wunsch 31.10.2026): während der Fahrt nur große Knöpfe.
    Ein Tipp auf „Erledigt – weiter“ hakt den Stopp ab und startet sofort die Navigation zum nächsten. ---------- */
@@ -521,15 +603,15 @@ document.addEventListener("visibilitychange",()=>{if(document.visibilityState!==
   if(seite.art==="fahrt"){wachHalten(true);zeige()}});
 function fahrtSeite(t){
   // Fahrmodus gilt immer für heute: Kunden im Urlaub oder ohne Liefertag heute werden übersprungen
-  const H=heuteListe(t),n=naechster(t),idx=n?t.stopps.indexOf(n)+1:0,fertig=H.filter(s=>s.erledigt).length;
-  const nachN=n?H.slice(H.indexOf(n)+1).find(s=>!s.erledigt):null,nachIdx=nachN?t.stopps.indexOf(nachN)+1:0;
+  const H=heuteListe(t),n=naechster(t),fertig=H.filter(s=>s.erledigt).length;
+  const nachN=n?H.slice(H.indexOf(n)+1).find(s=>!s.erledigt):null;
   const zurStart=t.zurueck!==false&&D.einst.start;
-  const kopf=h("div",{class:"fahrt-kopf"},h("button",{onclick:()=>geh({art:"tour",id:t.id})},"← Liste"),h("b",{},n?`Stopp ${idx} · noch ${H.length-fertig}`:t.name),h("span",{class:"klein"},`${fertig} ✓`));
+  const kopf=h("div",{class:"fahrt-kopf"},h("button",{onclick:()=>geh({art:"tour",id:t.id})},"← Liste"),h("b",{},n?`${n.ff?"FF "+n.ff+" · ":""}noch ${H.length-fertig}`:t.name),h("span",{class:"klein"},`${fertig} ✓`));
   if(!n)return h("div",{class:"fahrt"},kopf,h("div",{class:"fahrt-mitte"},h("div",{class:"fahrt-karte",style:"border-color:var(--ok);text-align:center"},h("div",{class:"fn"},H.length?"Alle Stopps erledigt":"Heute ist kein Kunde dran"),h("div",{class:"klein",style:"margin-top:6px"},`${H.length} Stopps heute in „${t.name}“`))),
     h("div",{class:"fahrt-unten"},letzterErledigt?h("button",{onclick:rueckgaengig},"↶ Letzten Haken zurücknehmen"):null,
       zurStart?h("button",{class:"weiter",onclick:()=>navigiere(D.einst.start)},"Zurück zum Start navigieren"):null,h("button",{class:"nav",onclick:()=>geh({art:"tour",id:t.id})},"Zur Tour-Liste")));
   const zu=strecke&&strecke.key===streckeKey&&strecke.zu[n.id];
-  const weiterText=nachN?`✓ Erledigt – weiter zu ${nachIdx}`:zurStart?"✓ Erledigt – zurück zum Start":"✓ Erledigt – Tour fertig";
+  const weiterText=nachN?`✓ Erledigt – weiter${nachN.ff?" zu FF "+nachN.ff:""}`:zurStart?"✓ Erledigt – zurück zum Start":"✓ Erledigt – Tour fertig";
   function weiter(){abhaken(n,true);letzterErledigt=n.id;speichern();if(navigator.vibrate)navigator.vibrate(40);zeige();
     if(nachN)navigiere(nachN);else if(zurStart)navigiere(D.einst.start)}
   function spaeter(){t.stopps.splice(t.stopps.indexOf(n),1);t.stopps.push(n);speichern();toast(`Stopp ans Ende verschoben.${nachN?" Weiter mit "+(nachN.name||nachN.text):""}`);zeige()}
@@ -537,14 +619,14 @@ function fahrtSeite(t){
   window.__rueckgaengig=rueckgaengig;
   return h("div",{class:"fahrt"},kopf,
     h("div",{class:"fahrt-mitte"},
-      h("div",{class:"fahrt-karte",onclick:()=>stoppDialog(t,n)},h("div",{class:"gnr"},idx),n.name?h("div",{class:"fn"},n.name):null,h("div",{class:"fa"},n.text),
+      h("div",{class:"fahrt-karte",onclick:()=>stoppDialog(t,n)},h("div",{class:"gnr"},nrT(n)),n.name?h("div",{class:"fn"},n.name):null,h("div",{class:"fa"},n.text),
         n.lat==null?h("div",{class:"fz",style:"background:var(--rotbg);color:var(--rot)"},"Adresse nicht gefunden: hier tippen und korrigieren"):null,
         n.notiz?h("div",{class:"fz"},n.notiz):null,zu?h("div",{class:"klein",style:"margin-top:8px"},`ca. ${kmT(zu.km)} km · ${zeitT(zu.min)} ab dem letzten Stopp`):null),
-      nachN?h("div",{class:"danach"},`Danach: ${nachIdx} · ${nachN.name?nachN.name+", ":""}${nachN.text}`):h("div",{class:"danach"},zurStart?"Danach: zurück zum Start":"Das ist der letzte Stopp.")),
+      nachN?h("div",{class:"danach"},`Danach: ${nachN.ff?"FF "+nachN.ff+" · ":""}${nachN.name?nachN.name+", ":""}${nachN.text}`):h("div",{class:"danach"},zurStart?"Danach: zurück zum Start":"Das ist der letzte Stopp.")),
     h("div",{class:"fahrt-unten"},
       h("div",{class:"klein3"},h("button",{onclick:()=>{if(n.tel)location.href="tel:"+n.tel.replace(/[^\d+]/g,"");else toast("Keine Telefonnummer bei diesem Stopp.")},style:n.tel?"":"opacity:.45"},"Anrufen"),
         h("button",{onclick:spaeter},"Später"),h("button",{onclick:rueckgaengig,style:letzterErledigt?"":"opacity:.45"},"↶ Zurück")),
-      h("button",{class:"nav",onclick:()=>navigiere(n)},`Navigieren zu ${idx}`),
+      h("button",{class:"nav",onclick:()=>navigiere(n)},n.ff?`Navigieren zu FF ${n.ff}`:"Navigieren"),
       h("button",{class:"weiter",onclick:weiter},weiterText)))}
 
 /* ---------- Karte und Strecke ---------- */
@@ -555,9 +637,9 @@ function karteZeichnen(einpassen){const t=tour(seite.id),el=$("#karte");if(!t||!
     osm.on("tileerror",()=>{if(++fehler===4){karte.removeLayer(osm);L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap, © CARTO"}).addTo(karte)}});
     osm.addTo(karte);schicht=L.layerGroup().addTo(karte);karte.setView(D.einst.start?[D.einst.start.lat,D.einst.start.lon]:[51.16,10.45],D.einst.start?12:6);einpassen=true}
   schicht.clearLayers();const n=naechster(t);
-  const pin=(lat,lon,txt,kl,fn)=>{const m=L.marker([lat,lon],{icon:L.divIcon({className:"pin "+kl,html:txt,iconSize:[28,28],iconAnchor:[14,14]})}).addTo(schicht);if(fn)m.on("click",fn)};
+  const pin=(lat,lon,txt,kl,fn)=>{const b=Math.max(28,txt.length*8+12),m=L.marker([lat,lon],{icon:L.divIcon({className:"pin "+kl,html:txt,iconSize:[b,28],iconAnchor:[b/2,14]})}).addTo(schicht);if(fn)m.on("click",fn)};
   if(D.einst.start)pin(D.einst.start.lat,D.einst.start.lon,"S","start");
-  const tag=tagIso();t.stopps.forEach((s,i)=>{if(s.lat!=null&&!grund(s,tag))pin(s.lat,s.lon,String(i+1),fertig(s)?"fertig":s===n?"naechster":"",()=>stoppDialog(t,s))});
+  const tag=tagIso();t.stopps.forEach(s=>{if(s.lat!=null&&!grund(s,tag))pin(s.lat,s.lon,s.ff||"•",fertig(s)?"fertig":s===n?"naechster":"",()=>stoppDialog(t,s))});
   if(strecke&&strecke.key===streckeKey&&strecke.geo.length)L.polyline(strecke.geo,{color:"#0f6e74",weight:5,opacity:.75}).addTo(schicht);
   if(einpassen){karte.invalidateSize();const p=punkte(t);if(p.length>1)karte.fitBounds(p.map(x=>[x.lat,x.lon]),{padding:[30,30]});else if(p.length===1)karte.setView([p[0].lat,p[0].lon],14)}}
 // Strecke in der festgelegten Reihenfolge (OSRM, in Stücken von höchstens 80 Punkten, damit es keine Obergrenze gibt)
@@ -574,7 +656,7 @@ function streckeHolen(){clearTimeout(streckeT);streckeT=setTimeout(async()=>{con
     if(seite.art==="fahrt"&&seite.id===t.id)zeige()}
   catch(e){console.warn(e);const i=$("#info");if(i&&streckeKey===key)i.lastChild&&(i.lastChild.textContent="Strecke gerade nicht verfügbar (Internet?)")}},700)}
 
-window.__liefertour={get D(){return D},packe,entpacke,tourDaten,tourUebernehmen,tageLesen,tageText,grund,tagesWechsel}; // zum Prüfen
+window.__liefertour={get D(){return D},packe,entpacke,tourDaten,tourUebernehmen,sicherungEinlesen,tageLesen,tageText,grund,tagesWechsel}; // zum Prüfen
 tagesWechsel();
 if(D.ansicht&&(D.ansicht.art==="fahrt"||D.ansicht.art==="tour")&&tour(D.ansicht.id))seite={art:D.ansicht.art,id:D.ansicht.id};
 if(seite.art==="fahrt")wachHalten(true);
