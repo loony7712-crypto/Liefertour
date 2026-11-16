@@ -96,6 +96,7 @@ main{padding:12px;padding-bottom:110px;max-width:760px;margin:0 auto}
    Karte (OpenStreetMap/Leaflet), Strecke (OSRM), Navigation zum nächsten Stopp mit Google Maps oder Apple Karten (wählbar).
    Adresssuche über Photon (OpenStreetMap). Alles im Speicher des Handys (localStorage), kein Server, keine Konten. */
 (function(){
+const FASSUNG="16.11.2026 b (Scan-Rahmen)"; // in den Einstellungen unten zu sehen: so erkennt man, ob das Handy die neue Fassung hat
 const LS="liefertour-v1",PHOTON="https://photon.komoot.io/api/",OSRM="https://router.project-osrm.org/route/v1/driving/";
 const $=s=>document.querySelector(s);
 function h(tag,attrs,...kids){const e=document.createElement(tag);
@@ -246,7 +247,8 @@ function einstSeite(){
       h("div",{class:"karte-t"},h("b",{},"Andere Fahrer"),h("p",{class:"klein",style:"margin:4px 0 8px"},"Schickt den Link zu dieser App per WhatsApp. Der Fahrer öffnet ihn und legt die App auf seinen Startbildschirm."),
         h("button",{style:"width:100%;background:#e7f8ee;border-color:#9fd8b4;color:#11672f;font-weight:600;margin-bottom:8px",onclick:appWeitergeben},"App per WhatsApp weitergeben"),
         h("button",{style:"width:100%",onclick:()=>window.open("anleitung.html","_blank")},"Anleitung für Fahrer")),
-      h("p",{class:"klein"},"Alles bleibt auf diesem Handy. Karte und Adresssuche: © OpenStreetMap-Mitwirkende, Photon, OSRM."))]}
+      h("p",{class:"klein"},"Alles bleibt auf diesem Handy. Karte und Adresssuche: © OpenStreetMap-Mitwirkende, Photon, OSRM."),
+      h("p",{class:"klein"},`Fassung ${FASSUNG}`))]}
 
 /* ---------- Teilen: Tour als Link (WhatsApp) oder Datei ---------- */
 // Der Link enthält die ganze Tour, gepackt (deflate) und als Text kodiert. Wer die App noch nicht hat, bekommt sie mit demselben Link.
@@ -568,7 +570,14 @@ function fotoAusDatei(t,liste=[],galerie=false){const inp=h("input",{type:"file"
 async function kameraScan(t,liste=[]){
   let strom;
   try{strom=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}},audio:false})}
-  catch(e){toast(e&&e.name==="NotAllowedError"?"Kamera nicht erlaubt. Es öffnet sich die normale Kamera.":"Kamera nicht verfügbar. Es öffnet sich die normale Kamera.");fotoAusDatei(t,liste);return}
+  catch(e){ // Grund deutlich zeigen, bevor die normale Kamera-App die Meldung verdeckt
+    const verboten=e&&(e.name==="NotAllowedError"||e.name==="SecurityError");
+    const w=await dialog("Kamera mit Rahmen geht nicht",h("div",{},
+      h("p",{style:"margin-top:0"},verboten?"Die App darf die Kamera nicht benutzen.":"Die Kamera ließ sich nicht starten (vielleicht benutzt sie gerade eine andere App)."),
+      verboten?h("p",{class:"klein"},"So erlaubst du es: in Chrome oben links neben der Adresse auf das Schloss bzw. ⓘ tippen → Berechtigungen → Kamera → Zulassen. Ist die App auf dem Startbildschirm: Symbol lange drücken → App-Info → Berechtigungen → Kamera → Zulassen. Danach die App neu öffnen."):null,
+      h("p",{class:"klein",style:"margin-bottom:0"},`(${e&&e.name||"Fehler"})`)),
+      [{text:"Abbrechen",wert:null},{text:"Normale Kamera",klasse:"haupt",wert:"ok"}]);
+    if(w==="ok")fotoAusDatei(t,liste);return}
   const spur=strom.getVideoTracks()[0];let licht=false,art="adresse",laeuft=false,kannLicht=false;
   try{kannLicht=!!(spur.getCapabilities&&spur.getCapabilities().torch)}catch(e){}
   const vid=h("video",{autoplay:true,playsinline:true,muted:true});vid.muted=true;vid.srcObject=strom;vid.play().catch(()=>{});
