@@ -42,7 +42,7 @@ main{padding:12px;padding-bottom:110px;max-width:760px;margin:0 auto}
 .unten .ziel{font-size:14px;color:var(--mut);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pin{background:var(--acc);color:#fff;border:2px solid #fff;border-radius:15px;display:flex!important;align-items:center;justify-content:center;font:700 12px Arial;box-shadow:0 1px 4px rgba(0,0,0,.4)}
 .pin.fertig{background:#8a9aa5}.pin.naechster{background:#e65100}.pin.start{background:#1d2733}
-.dlg-bg{position:fixed;inset:0;background:rgba(20,30,40,.45);z-index:1000;display:flex;align-items:flex-end;justify-content:center}
+.dlg-bg{position:fixed;inset:0;background:rgba(20,30,40,.45);z-index:1800;display:flex;align-items:flex-end;justify-content:center}
 .dlg{background:var(--card);width:100%;max-width:640px;border-radius:18px 18px 0 0;padding:14px;padding-bottom:max(14px,env(safe-area-inset-bottom));max-height:92vh;overflow:auto}
 .dlg-kopf{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;font-size:19px}
 .dlg-fuss{display:flex;gap:8px;margin-top:12px}.dlg-fuss button{flex:1}
@@ -75,6 +75,18 @@ main{padding:12px;padding-bottom:110px;max-width:760px;margin:0 auto}
 .fahrt-unten .nav{min-height:64px;font-size:20px;border:2px solid var(--acc);color:var(--acc);font-weight:600;border-radius:16px}
 .fahrt-unten .weiter{min-height:88px;font-size:23px;font-weight:700;background:var(--ok);color:#fff;border-color:var(--ok);border-radius:18px}
 .unten .start{background:var(--ok);border-color:var(--ok);color:#fff;font-weight:700;min-height:64px;font-size:21px}
+/* Scan-Rahmen (Spec 004) */
+.kam{position:fixed;inset:0;z-index:1600;background:#000;overflow:hidden}
+.kam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.kam .rahmen{position:absolute;left:5%;right:5%;border:3px solid #fff;border-radius:12px;box-shadow:0 0 0 9999px rgba(0,0,0,.55)}
+.kam .zieh{position:absolute;left:50%;bottom:-17px;transform:translateX(-50%);width:64px;height:32px;border-radius:16px;background:#fff;color:#333;touch-action:none;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 1px 4px rgba(0,0,0,.4)}
+.kam-oben{position:absolute;top:0;left:0;right:0;z-index:2;display:flex;gap:8px;align-items:center;padding:10px;padding-top:max(10px,env(safe-area-inset-top))}
+.kam-art{flex:1;display:flex;justify-content:center;gap:6px}.kam-art button{min-height:44px;padding:6px 12px;font-size:15px;background:rgba(255,255,255,.85)}.kam-art button.an{background:#fff;border:2px solid var(--acc);color:var(--acc);font-weight:700}
+.kam-oben>button{min-height:44px;background:rgba(255,255,255,.85)}.kam-oben>button.an{background:#ffe08a}
+.kam-unten{position:absolute;left:0;right:0;bottom:0;z-index:2;display:flex;flex-direction:column;gap:10px;padding:12px;padding-bottom:max(14px,env(safe-area-inset-bottom))}
+.kam-status{color:#fff;text-align:center;font-size:17px;text-shadow:0 1px 3px #000;min-height:24px;overflow-wrap:anywhere}
+.kam-knoepfe{display:grid;grid-template-columns:1fr 1.5fr 1fr;gap:10px}.kam-knoepfe button{min-height:60px;font-size:16px}
+.kam .ausloeser{background:var(--ok);color:#fff;border-color:var(--ok);font-weight:700;font-size:20px}.kam .ausloeser:disabled{opacity:.6}
 #toast{position:fixed;left:50%;bottom:120px;transform:translateX(-50%);background:#22303d;color:#fff;padding:12px 18px;border-radius:12px;display:none;z-index:2000;max-width:90vw;text-align:center}
 </style></head><body>
 <div id="app"></div><div id="toast"></div>
@@ -142,7 +154,7 @@ function tagesWechsel(){const h0=heuteIso();let neu=false;
 function bias(){const s=D.einst.start;return s?`&lat=${s.lat}&lon=${s.lon}`:""}
 function label(p){const str=[p.street,p.housenumber].filter(Boolean).join(" "),ort=[p.postcode,p.city||p.town||p.village||p.locality||p.district].filter(Boolean).join(" ");
   const teile=[p.name&&p.name!==p.street?p.name:"",str,ort].filter(Boolean);return[...new Set(teile)].join(", ")}
-// Spec 004 (16.11.2026): bei Netzfehler oder überlasteter Suche bis zu 3 Versuche (Pause 1 s, dann 2,5 s)
+// Wunsch 16.11.2026: bei Netzfehler oder überlasteter Suche bis zu 3 Versuche (Pause 1 s, dann 2,5 s)
 async function suche(q,limit=5,versuche=3){let j=null;
   for(let n=1;;n++){try{const r=await fetch(`${PHOTON}?q=${encodeURIComponent(q)}&limit=${limit}&lang=de${bias()}`);if(!r.ok)throw new Error("Suche "+r.status);j=await r.json();break}
     catch(e){if(n>=versuche){e.netz=true;throw e}await new Promise(ok=>setTimeout(ok,n===1?1000:2500))}}return j.features.map(f=>({lat:f.geometry.coordinates[1],lon:f.geometry.coordinates[0],text:label(f.properties),hn:!!f.properties.housenumber}))}
@@ -453,7 +465,7 @@ async function einlesen(t,eintraege){
     speichern();if(seite.id===t.id)aktualisiere(t,true);toast(`Adressen werden gesucht: ${n} von ${eintraege.length}`)}
   if(seite.id===t.id)aktualisiere(t);
   toast(!fehlt?`Alle ${eintraege.length} Adressen gefunden.`:netz?`${eintraege.length-fehlt} gefunden, ${fehlt} rot (${netz} wegen Verbindung). Mit „Rote erneut suchen“ nochmal versuchen.`:`${eintraege.length-fehlt} gefunden, ${fehlt} nicht gefunden (rot, bitte antippen und korrigieren).`)}
-// Spec 004: alle roten Stopps einer Tour noch einmal suchen (z. B. nach einem Funkloch)
+// Wunsch 16.11.2026: alle roten Stopps einer Tour noch einmal suchen (z. B. nach einem Funkloch)
 let sucheLaeuft=false;
 async function roteErneut(t){if(sucheLaeuft)return;const rot=t.stopps.filter(s=>s.lat==null);if(!rot.length)return;sucheLaeuft=true;let n=0,ok=0,netz=0;
   try{for(const s of rot){const q=s.suche?s.suche.q:s.text,mn=s.suche?s.suche.mitName:!s.name;toast(`Rote werden gesucht: ${++n} von ${rot.length}`);
@@ -544,18 +556,77 @@ function ohneTagesSpalten(d){const W=d.words||[];
   if(!mo||!d.lines||!d.lines.length)return d.text;
   const rechts=mo.bbox.x0-8,tour=W.find(w=>/^TOUR$/i.test(w.text)),links=tour?tour.bbox.x0-8:-1;
   return d.lines.map(l=>l.words.filter(w=>w.bbox.x0<rechts&&w.bbox.x1>links).map(w=>w.text).join(" ")).join("\n")}
-function fotoScannen(t,liste=[]){const inp=h("input",{type:"file",accept:"image/*",capture:"environment"});
+// „Foto scannen“: Kamerabild mit Rahmen in der App (Spec 004); wo das nicht geht, wie bisher die Kamera-App des Handys
+function fotoScannen(t,liste=[]){if(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia&&window.isSecureContext)kameraScan(t,liste);else fotoAusDatei(t,liste)}
+function fotoAusDatei(t,liste=[],galerie=false){const inp=h("input",{type:"file",accept:"image/*",capture:galerie?null:"environment"});
   inp.addEventListener("change",async()=>{const f=inp.files[0];if(!f)return;const neu=await fotoLesen(f);if(neu==null){if(liste.length)pruefen(t,liste);return}
     liste.push(...neu);pruefen(t,liste,neu.length)});inp.click()}
-window.__fotoLesen=f=>fotoLesen(f); // zum Prüfen
-async function fotoLesen(datei,titel="Foto wird gelesen"){
+/* ---------- Scan-Rahmen (Spec 004, 16.11.2026) ----------
+   Kamerabild in der App, heller Rahmen in Adressgröße, der Rest abgedunkelt. „Scannen“ liest nur den Inhalt des Rahmens
+   (aus dem Videobild in voller Auflösung ausgeschnitten), die Kamera bleibt offen für die nächste Adresse. „Fertig“ → Prüfliste.
+   Umschalter „Ganze Seite“ = großer Rahmen. Rahmenhöhe am Griff ziehen (gemerkt in D.einst.rahmenH). Bilder werden nicht gespeichert. */
+async function kameraScan(t,liste=[]){
+  let strom;
+  try{strom=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}},audio:false})}
+  catch(e){toast(e&&e.name==="NotAllowedError"?"Kamera nicht erlaubt. Es öffnet sich die normale Kamera.":"Kamera nicht verfügbar. Es öffnet sich die normale Kamera.");fotoAusDatei(t,liste);return}
+  const spur=strom.getVideoTracks()[0];let licht=false,art="adresse",laeuft=false,kannLicht=false;
+  try{kannLicht=!!(spur.getCapabilities&&spur.getCapabilities().torch)}catch(e){}
+  const vid=h("video",{autoplay:true,playsinline:true,muted:true});vid.muted=true;vid.srcObject=strom;vid.play().catch(()=>{});
+  const griff=h("div",{class:"zieh","aria-label":"Rahmen höher oder flacher ziehen"},"↕"),rahmen=h("div",{class:"rahmen"},griff);
+  const status=h("div",{class:"kam-status"},"Adresse in den Rahmen halten, dann „Scannen“");
+  const fertigK=h("button",{onclick:()=>schliessen(true)},"Fertig"),ausl=h("button",{class:"ausloeser",onclick:scannen},"◉ Scannen");
+  const artBox=h("div",{class:"kam-art"});
+  const lichtK=h("button",{"aria-label":"Taschenlampe",onclick:async()=>{licht=!licht;try{await spur.applyConstraints({advanced:[{torch:licht}]})}catch(e){licht=false;toast("Die Taschenlampe lässt sich hier nicht einschalten.")}lichtK.classList.toggle("an",licht)}},"💡");
+  const galerieK=h("button",{onclick:()=>{schliessen(false);fotoAusDatei(t,liste,true)}},"🖼 Galerie");
+  const box=h("div",{class:"kam"},vid,rahmen,
+    h("div",{class:"kam-oben"},h("button",{onclick:abbrechen,"aria-label":"Schließen"},"✕"),artBox,kannLicht?lichtK:null),
+    h("div",{class:"kam-unten"},status,h("div",{class:"kam-knoepfe"},galerieK,ausl,fertigK)));
+  document.body.append(box);
+  function mal(){
+    artBox.replaceChildren(...[["adresse","Adresse"],["seite","Ganze Seite"]].map(([k,txt])=>h("button",{class:art===k?"an":"",onclick:()=>{art=k;mal()}},txt)));
+    const H=innerHeight;let hoehe,oben;
+    if(art==="seite"){oben=Math.round(H*0.1);hoehe=Math.round(H*0.66)}
+    else{hoehe=Math.round(Math.max(70,Math.min(H*0.6,D.einst.rahmenH||Math.min(innerWidth,520)*0.36)));oben=Math.round(H*0.4-hoehe/2)}
+    rahmen.style.top=oben+"px";rahmen.style.height=hoehe+"px";griff.style.display=art==="seite"?"none":"flex";
+    fertigK.textContent=liste.length?`Fertig (${liste.length})`:"Fertig"}
+  mal();addEventListener("resize",mal);
+  griff.addEventListener("pointerdown",e=>{e.preventDefault();e.stopPropagation();try{griff.setPointerCapture(e.pointerId)}catch(x){}const y0=e.clientY,h0=rahmen.offsetHeight,pid=e.pointerId;
+    const mv=ev=>{if(ev.pointerId===pid)rahmen.style.height=Math.max(70,Math.min(innerHeight*0.6,h0+ev.clientY-y0))+"px"};
+    const up=ev=>{if(ev.pointerId!==pid)return;removeEventListener("pointermove",mv);removeEventListener("pointerup",up);removeEventListener("pointercancel",up);D.einst.rahmenH=rahmen.offsetHeight;speichern()};
+    addEventListener("pointermove",mv);addEventListener("pointerup",up);addEventListener("pointercancel",up)});
+  // Rahmen auf dem Bildschirm → Ausschnitt im Videobild (das Video füllt den Bildschirm wie „cover“)
+  function ausschnitt(){const vw=vid.videoWidth,vh=vid.videoHeight;if(!vw)return null;return rahmenAusschnitt(vid,vw,vh,box.getBoundingClientRect(),rahmen.getBoundingClientRect())}
+  async function scannen(){if(laeuft)return;const c=ausschnitt();if(!c){toast("Die Kamera startet noch …");return}
+    laeuft=true;ausl.disabled=true;status.textContent="Wird gelesen …";
+    try{const neu=await fotoLesen(c,"Wird gelesen",art==="adresse");
+      if(neu==null){status.textContent="Die Texterkennung lädt nicht. Ist das Handy online?";return}
+      const dazu=neueOhneDoppelte(liste,neu);liste.push(...dazu);
+      if(dazu.length){if(navigator.vibrate)navigator.vibrate(60);const e=dazu[dazu.length-1];status.textContent=`✓ Erkannt${dazu.length>1?` (${dazu.length})`:""}: ${e.ff?"FF "+e.ff+" · ":""}${e.name||e.q}`}
+      else status.textContent=neu.length?"Diese Adresse ist schon drin.":"Nichts erkannt. Adresse mittig in den Rahmen halten und ruhig halten.";
+      mal()}
+    finally{laeuft=false;ausl.disabled=false}}
+  function stop(){strom.getTracks().forEach(x=>x.stop());removeEventListener("resize",mal);box.remove()}
+  function schliessen(pruef){stop();if(pruef&&liste.length)pruefen(t,liste,liste.length)}
+  async function abbrechen(){if(liste.length&&!await frage("Scannen beenden",`${liste.length} gescannte Adressen verwerfen?`,"Verwerfen","rot"))return;stop()}}
+function rahmenAusschnitt(quelle,vw,vh,b,r){
+  const s=Math.max(b.width/vw,b.height/vh),ox=(b.width-vw*s)/2,oy=(b.height-vh*s)/2;
+  let sx=Math.max(0,(r.left-b.left-ox)/s),sy=Math.max(0,(r.top-b.top-oy)/s);const sw=Math.min(vw-sx,r.width/s),sh=Math.min(vh-sy,r.height/s);
+  const z=Math.max(1,Math.min(3,1600/sw)),c=document.createElement("canvas");c.width=Math.round(sw*z);c.height=Math.round(sh*z); // kleine Ausschnitte vergrößern, liest sich besser
+  const g=c.getContext("2d");g.imageSmoothingQuality="high";g.drawImage(quelle,sx,sy,sw,sh,0,0,c.width,c.height);return c}
+// dieselbe Adresse nicht zweimal übernehmen (gleiche FF und Straße)
+const scanSchl=e=>(e.ff||"")+"|"+e.q.toLowerCase().replace(/[^a-zäöüß0-9]/g,"").slice(0,14);
+function neueOhneDoppelte(liste,neu){const da=new Set(liste.map(scanSchl));return neu.filter(e=>{const k=scanSchl(e);if(da.has(k))return false;da.add(k);return true})}
+window.__scan={rahmenAusschnitt,neueOhneDoppelte}; // zum Prüfen
+window.__fotoLesen=(f,einzeln)=>fotoLesen(f,"Foto wird gelesen",einzeln); // zum Prüfen
+async function fotoLesen(datei,titel="Foto wird gelesen",einzeln=false){
   const st=h("div",{style:"font-size:20px;text-align:center;padding:20px 0"},"Texterkennung wird vorbereitet …");
   const bg=h("div",{class:"dlg-bg"},h("div",{class:"dlg"},h("div",{class:"dlg-kopf"},h("b",{},titel)),st,h("p",{class:"klein",style:"text-align:center"},"Beim ersten Mal wird die Texterkennung geladen (einige MB), danach geht es schneller.")));
   document.body.append(bg);
   try{ocrFort=m=>{st.textContent=m.status==="recognizing text"?`Text wird gelesen … ${Math.round((m.progress||0)*100)} %`:"Texterkennung wird vorbereitet …"};
     const w=await ocrLaden(),b=await bildVorbereiten(datei);
-    await w.setParameters({tessedit_pageseg_mode:"4"});const a=adressenAusText(ohneTagesSpalten((await w.recognize(b.sw)).data));
-    await w.setParameters({tessedit_pageseg_mode:"3"});const c=adressenAusText(ohneTagesSpalten((await w.recognize(b.grau)).data));
+    // einzeln = Ausschnitt aus dem Scan-Rahmen: ein Textblock (Modus 6), schneller
+    await w.setParameters({tessedit_pageseg_mode:einzeln?"6":"4"});const a=adressenAusText(ohneTagesSpalten((await w.recognize(b.sw)).data));
+    await w.setParameters({tessedit_pageseg_mode:einzeln?"6":"3"});const c=adressenAusText(ohneTagesSpalten((await w.recognize(b.grau)).data));
     // zusammenführen: Reihenfolge der Schwarz-weiß-Fassung, fehlende aus der grauen ergänzen; vollständigere Lesung gewinnt
     const key=e=>e.q.toLowerCase().replace(/[^a-zäöüß0-9]/g,"").replace(/stra(ss|ß)e$/,"str").slice(0,10);
     // gleiche Straße, auch wenn eine Lesung vorne etwas verliert („Am Telering 8“ / „Telering 8“)
@@ -566,7 +637,10 @@ async function fotoLesen(datei,titel="Foto wird gelesen"){
         else if(e.q.length>da.q.length&&/\d/.test(e.q.split(",")[0]))da.q=e.q;if(!da.name||(e.name&&/^[A-ZÄÖÜa-zäöüß -]+$/.test(e.name)&&e.name.length>=da.name.length))da.name=e.name||da.name;if(!da.notiz)da.notiz=e.notiz}}
     // Haben die meisten eine FF-Nummer, ist sie die Reihenfolge der Liste (die Texterkennung liest manchmal Blöcke durcheinander)
     if(a.filter(e=>e.ff).length*2>=a.length){const mit=a.filter(e=>e.ff).sort((x,y)=>parseInt(x.ff,10)-parseInt(y.ff,10)),ohne=a.filter(e=>!e.ff);a.length=0;a.push(...mit,...ohne)}
-    a.forEach(e=>delete e.ohneOrt);return a}
+    a.forEach(e=>delete e.ohneOrt);
+    // Scan-Rahmen: nur vollständige Adressen (mit PLZ); halb abgeschnittene Zeilen am Rahmenrand fallen weg. Hat eine Adresse eine FF, zählen nur die mit FF.
+    if(einzeln){let x=a.filter(e=>/,\s*\d{5}\s/.test(e.q));if(x.some(e=>e.ff))x=x.filter(e=>e.ff);a.length=0;a.push(...x)}
+    return a}
   catch(e){console.warn(e);toast("Die Texterkennung lädt nicht. Ist das Handy online?");return null}
   finally{ocrFort=null;bg.remove()}}
 /* ---------- PDF einlesen (Wunsch 31.10.2026): Tourenliste als PDF ----------
