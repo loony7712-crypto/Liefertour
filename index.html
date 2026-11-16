@@ -142,20 +142,25 @@ function tagesWechsel(){const h0=heuteIso();let neu=false;
 function bias(){const s=D.einst.start;return s?`&lat=${s.lat}&lon=${s.lon}`:""}
 function label(p){const str=[p.street,p.housenumber].filter(Boolean).join(" "),ort=[p.postcode,p.city||p.town||p.village||p.locality||p.district].filter(Boolean).join(" ");
   const teile=[p.name&&p.name!==p.street?p.name:"",str,ort].filter(Boolean);return[...new Set(teile)].join(", ")}
-async function suche(q,limit=5){const r=await fetch(`${PHOTON}?q=${encodeURIComponent(q)}&limit=${limit}&lang=de${bias()}`);if(!r.ok)throw new Error("Suche "+r.status);
-  const j=await r.json();return j.features.map(f=>({lat:f.geometry.coordinates[1],lon:f.geometry.coordinates[0],text:label(f.properties),hn:!!f.properties.housenumber}))}
+// Spec 004 (16.11.2026): bei Netzfehler oder überlasteter Suche bis zu 3 Versuche (Pause 1 s, dann 2,5 s)
+async function suche(q,limit=5,versuche=3){let j=null;
+  for(let n=1;;n++){try{const r=await fetch(`${PHOTON}?q=${encodeURIComponent(q)}&limit=${limit}&lang=de${bias()}`);if(!r.ok)throw new Error("Suche "+r.status);j=await r.json();break}
+    catch(e){if(n>=versuche){e.netz=true;throw e}await new Promise(ok=>setTimeout(ok,n===1?1000:2500))}}return j.features.map(f=>({lat:f.geometry.coordinates[1],lon:f.geometry.coordinates[0],text:label(f.properties),hn:!!f.properties.housenumber}))}
 // Eine Zeile aus einer eingefügten Liste: „Name, Straße 1, PLZ Ort“ oder nur die Adresse
 // mitName=false: die Zeile ist sicher nur eine Adresse (z. B. aus Excel-Spalten)
 async function finde(zeile,mitName=true){const k=(mitName?"":"a:")+zeile.trim().toLowerCase();if(D.cache[k])return D.cache[k];
   const teile=zeile.split(",").map(s=>s.trim()).filter(Boolean);let name="",q=zeile;
   if(mitName&&teile.length>=3&&!/\d/.test(teile[0])){name=teile[0];q=teile.slice(1).join(", ")}
-  let r=(await suche(q,1))[0];
-  if(!r&&mitName&&!name&&teile.length>=2&&!/\d/.test(teile[0])){name=teile[0];r=(await suche(teile.slice(1).join(", "),1))[0]}
+  let r=(await suche(q,1))[0],ungefaehr=false;
+  if(!r&&mitName&&!name&&teile.length>=2&&!/\d/.test(teile[0])){name=teile[0];q=teile.slice(1).join(", ");r=(await suche(q,1))[0]}
+  // Notlösung: ohne Ortsteil („03051 Cottbus OT Gallinchen“ → „03051 Cottbus“), dann ohne Hausnummer (Stopp landet an der Straße)
+  if(!r){const ohneOT=q.replace(/\s+OT\s+[^,]*/i,"").trim();if(ohneOT!==q)r=(await suche(ohneOT,1))[0];
+    if(!r){const ohneNr=ohneOT.replace(/^([^,]*?)\s+\d+\s?[a-zA-Z]?(?:\s?[-\/]\s?\d+[a-zA-Z]?)?(?=\s*,)/,"$1");if(ohneNr!==ohneOT){r=(await suche(ohneNr,1))[0];if(r)ungefaehr=true}}}
   if(!r)return null;
   // Angezeigt wird die Adresse so, wie sie in der Liste stand (mit „38 C“ usw.); die Kartensuche liefert nur den Punkt auf der Karte.
   // Nur wenn die Zeile keine Hausnummer hatte, steht der Text der Kartensuche da.
   const eigen=name?zeile.slice(zeile.indexOf(",")+1).trim():zeile.trim();
-  const e={lat:r.lat,lon:r.lon,text:/\d/.test(eigen)?eigen:r.text,name};D.cache[k]=e;speichern();return e}
+  const e={lat:r.lat,lon:r.lon,text:/\d/.test(eigen)?eigen:r.text,name,...(ungefaehr?{ungefaehr:true}:{})};D.cache[k]=e;speichern();return e}
 
 /* ---------- Dialoge (von unten, gut mit dem Daumen) ---------- */
 function dialog(titel,inhalt,knoepfe){return new Promise(ok=>{
@@ -321,8 +326,10 @@ function tagZeichnen(t){const el=$("#tag");if(!el)return;const tag=tagIso(),h0=h
   el.replaceChildren(h("div",{class:"tagleiste"},knopf("Heute",!ansichtTag,()=>setze(h0)),knopf("Morgen",tag===morgen,()=>setze(morgen)),knopf(ansichtTag&&tag!==morgen?tagName(tag):"Datum …",ansichtTag&&tag!==morgen,wahl)),
     t.stopps.length?h("div",{class:"tagtext"+(ansichtTag?" vorschau":"")},h("b",{},`${ansichtTag?"Vorschau ":"Heute, "}${tagName(tag)}: `),`${H.length} von ${t.stopps.length} Kunden`,teile.length?` · ${teile.join(" · ")}`:""):null)}
 function infoZeichnen(t){const i=$("#info");if(!i)return;const H=heuteListe(t),offen=H.filter(s=>!fertig(s)).length,fehlt=H.filter(s=>s.lat==null).length;
+  const rot=t.stopps.filter(s=>s.lat==null).length;
   i.replaceChildren(...[h("span",{},`${H.length} Stopps · ${offen} offen`),fehlt?h("span",{style:"color:var(--rot)"},`${fehlt} nicht gefunden`):null,
-    strecke&&strecke.key===streckeKey?h("span",{},`ca. ${kmT(strecke.km)} km · ${zeitT(strecke.min)}`):h("span",{},H.length?"Strecke wird berechnet …":"")].filter(Boolean))}
+    strecke&&strecke.key===streckeKey?h("span",{},`ca. ${kmT(strecke.km)} km · ${zeitT(strecke.min)}`):h("span",{},H.length?"Strecke wird berechnet …":""),
+    rot?h("button",{class:"rot",style:"width:100%;min-height:44px;font-weight:600",onclick:()=>roteErneut(t)},sucheLaeuft?"Suche läuft …":`🔄 Rote erneut suchen (${rot})`):null].filter(Boolean))}
 // Stopp selbst eintragen (Spec 003): zuerst die FF-Nummer, dann die Adresse; danach gleich der nächste, bis „Fertig“
 async function stoppHinzu(t){let n=0;
   for(;;){const f=h("input",{placeholder:"z. B. 012",inputmode:"numeric",autocomplete:"off"});
@@ -347,7 +354,8 @@ function listeZeichnen(t){const l=$("#liste");if(!l)return;const n=naechster(t),
     const g=grund(s,tag);if(g){weg.push([s,i,g]);return null}
     const griff=h("div",{class:"griff","aria-label":"Ziehen zum Verschieben"},"⋮⋮");
     const zeile=h("div",{class:"stopp"+(fertig(s)?" fertig":"")+(s===n?" naechster":"")+(s.lat==null?" fehlt":""),"data-id":s.id},griff,h("div",{class:"nr"},nrT(s)),
-      h("div",{class:"st",onclick:()=>stoppDialog(t,s)},s.name?h("b",{},s.name):null,h("div",{class:"a"},s.text),s.lat==null?h("div",{class:"klein",style:"color:var(--rot)"},"nicht gefunden: antippen und korrigieren"):null,
+      h("div",{class:"st",onclick:()=>stoppDialog(t,s)},s.name?h("b",{},s.name):null,h("div",{class:"a"},s.text),s.lat==null?h("div",{class:"klein",style:"color:var(--rot)"},s.netz?"keine Verbindung beim Suchen: oben „Rote erneut suchen“":"nicht gefunden: antippen und korrigieren"):null,
+        s.ungefaehr&&s.lat!=null?h("div",{class:"klein",style:"color:var(--gelb)"},"≈ ungefähr: nur die Straße gefunden"):null,
         s.notiz?h("div",{class:"klein"},s.notiz):null,marken(s),strecke&&strecke.key===streckeKey&&strecke.zu[s.id]?h("div",{class:"klein"},`+${kmT(strecke.zu[s.id].km)} km · ${zeitT(strecke.zu[s.id].min)}`):null),
       ansichtTag?null:h("button",{class:"haken","aria-label":s.erledigt?"Wieder öffnen":"Erledigt",onclick:()=>{abhaken(s,!s.erledigt);speichern();aktualisiere(t)}},"✓"));
     ziehen(t,griff,zeile,l);return zeile}).filter(Boolean));
@@ -404,7 +412,7 @@ async function stoppDialog(t,s){
       h("div",{class:"reihe"},knopf("Navigieren",()=>navigiere(s),"haupt"),s.tel?knopf("Anrufen",()=>{location.href="tel:"+s.tel.replace(/[^\d+]/g,"")}):null),
       h("div",{class:"reihe"},knopf("▲ Nach oben",()=>{if(i>0){t.stopps.splice(i,1);t.stopps.splice(i-1,0,s);speichern();aktualisiere(t)}}),knopf("▼ Nach unten",()=>{if(i<t.stopps.length-1){t.stopps.splice(i,1);t.stopps.splice(i+1,0,s);speichern();aktualisiere(t)}})),
       h("div",{class:"reihe"},knopf("An andere Stelle verschieben …",()=>verschieben(t,s))),
-      h("div",{class:"reihe"},knopf("Adresse ändern",()=>adresseSuchen("Adresse ändern",{beiWahl:x=>{Object.assign(s,{text:x.text,lat:x.lat,lon:x.lon});speichern();aktualisiere(t)}})),
+      h("div",{class:"reihe"},knopf("Adresse ändern",()=>adresseSuchen("Adresse ändern",{beiWahl:x=>{Object.assign(s,{text:x.text,lat:x.lat,lon:x.lon});delete s.suche;delete s.netz;delete s.ungefaehr;speichern();aktualisiere(t)}})),
         knopf("Stopp löschen",async()=>{if(await frage("Stopp löschen",`${s.text} aus der Tour löschen?`,"Löschen","rot")){t.stopps=t.stopps.filter(x=>x!==s);speichern();aktualisiere(t)}},"rot"))),
     [{text:"Fertig",klasse:"haupt",wert:"ok"}]);
   uebernehmen()}
@@ -435,14 +443,27 @@ async function listeEinfuegen(t){
   einlesen(t,zeilen.map(z=>({q:z,mitName:true})))}
 // Gemeinsam für Liste und Excel: e = {q: Adresse, mitName, name, tel, notiz}; nacheinander suchen, nicht gefundene rot anlegen
 async function einlesen(t,eintraege){
-  let n=0,fehlt=0;toast(`Adressen werden gesucht: 0 von ${eintraege.length}`);
-  for(const e of eintraege){let r=null;const imSpeicher=!!D.cache[(e.mitName?"":"a:")+e.q.trim().toLowerCase()];
-    try{r=await finde(e.q,!!e.mitName)}catch(x){}
+  let n=0,fehlt=0,netz=0;toast(`Adressen werden gesucht: 0 von ${eintraege.length}`);
+  for(const e of eintraege){let r=null,nf=false;const imSpeicher=!!D.cache[(e.mitName?"":"a:")+e.q.trim().toLowerCase()];
+    try{r=await finde(e.q,!!e.mitName)}catch(x){nf=true}
     if(!imSpeicher)await new Promise(ok=>setTimeout(ok,350)); // die freie Adresssuche nicht überlasten
-    n++;if(!r)fehlt++;
-    t.stopps.push({id:neuId(),text:r?r.text:e.q,lat:r?r.lat:null,lon:r?r.lon:null,name:e.name||(r&&r.name)||"",tel:e.tel||"",notiz:e.notiz||"",erledigt:false,...(e.tage?{tage:e.tage}:{}),...(e.ff?{ff:e.ff}:{})});
+    n++;if(!r){fehlt++;if(nf)netz++}
+    t.stopps.push({id:neuId(),text:r?r.text:e.q,lat:r?r.lat:null,lon:r?r.lon:null,name:e.name||(r&&r.name)||"",tel:e.tel||"",notiz:e.notiz||"",erledigt:false,...(e.tage?{tage:e.tage}:{}),...(e.ff?{ff:e.ff}:{}),
+      ...(r&&r.ungefaehr?{ungefaehr:true}:{}),...(!r?{suche:{q:e.q,mitName:!!e.mitName},...(nf?{netz:true}:{})}:{})});
     speichern();if(seite.id===t.id)aktualisiere(t,true);toast(`Adressen werden gesucht: ${n} von ${eintraege.length}`)}
-  if(seite.id===t.id)aktualisiere(t);toast(fehlt?`${eintraege.length-fehlt} gefunden, ${fehlt} nicht gefunden (rot, bitte antippen und korrigieren).`:`Alle ${eintraege.length} Adressen gefunden.`)}
+  if(seite.id===t.id)aktualisiere(t);
+  toast(!fehlt?`Alle ${eintraege.length} Adressen gefunden.`:netz?`${eintraege.length-fehlt} gefunden, ${fehlt} rot (${netz} wegen Verbindung). Mit „Rote erneut suchen“ nochmal versuchen.`:`${eintraege.length-fehlt} gefunden, ${fehlt} nicht gefunden (rot, bitte antippen und korrigieren).`)}
+// Spec 004: alle roten Stopps einer Tour noch einmal suchen (z. B. nach einem Funkloch)
+let sucheLaeuft=false;
+async function roteErneut(t){if(sucheLaeuft)return;const rot=t.stopps.filter(s=>s.lat==null);if(!rot.length)return;sucheLaeuft=true;let n=0,ok=0,netz=0;
+  try{for(const s of rot){const q=s.suche?s.suche.q:s.text,mn=s.suche?s.suche.mitName:!s.name;toast(`Rote werden gesucht: ${++n} von ${rot.length}`);
+    let r=null;try{r=await finde(q,mn)}catch(e){netz++;s.netz=true;continue}
+    await new Promise(o=>setTimeout(o,350));
+    if(r){Object.assign(s,{lat:r.lat,lon:r.lon,text:r.text});if(!s.name&&r.name)s.name=r.name;if(r.ungefaehr)s.ungefaehr=true;delete s.suche;delete s.netz;ok++}else delete s.netz;
+    speichern();if(seite.id===t.id)aktualisiere(t,true)}}
+  finally{sucheLaeuft=false}
+  if(seite.id===t.id)aktualisiere(t);
+  const rest=rot.length-ok;toast(!rest?`Alle ${ok} gefunden.`:`${ok} gefunden, ${rest} noch rot${netz?` (${netz} wegen Verbindung, später nochmal)`:" (bitte antippen und Adresse ändern)"}.`)}
 /* Excel (.xlsx, .xls, .csv): SheetJS wird erst beim ersten Gebrauch geladen. Spalten werden an der Kopfzeile erkannt,
    ohne Kopfzeile gilt jede Zeile als eine Adresse (Zellen mit Komma verbunden). */
 async function excelLaden(){if(window.XLSX)return;await new Promise((ok,nein)=>{const s=document.createElement("script");s.src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";s.onload=ok;s.onerror=()=>nein(new Error("laden"));document.head.append(s)})}
@@ -656,7 +677,7 @@ function streckeHolen(){clearTimeout(streckeT);streckeT=setTimeout(async()=>{con
     if(seite.art==="fahrt"&&seite.id===t.id)zeige()}
   catch(e){console.warn(e);const i=$("#info");if(i&&streckeKey===key)i.lastChild&&(i.lastChild.textContent="Strecke gerade nicht verfügbar (Internet?)")}},700)}
 
-window.__liefertour={get D(){return D},packe,entpacke,tourDaten,tourUebernehmen,sicherungEinlesen,tageLesen,tageText,grund,tagesWechsel}; // zum Prüfen
+window.__liefertour={get D(){return D},packe,entpacke,tourDaten,tourUebernehmen,sicherungEinlesen,roteErneut,finde,tageLesen,tageText,grund,tagesWechsel}; // zum Prüfen
 tagesWechsel();
 if(D.ansicht&&(D.ansicht.art==="fahrt"||D.ansicht.art==="tour")&&tour(D.ansicht.id))seite={art:D.ansicht.art,id:D.ansicht.id};
 if(seite.art==="fahrt")wachHalten(true);
